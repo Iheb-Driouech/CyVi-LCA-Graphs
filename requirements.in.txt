@@ -1,0 +1,8 @@
+# requirements.in
+streamlit
+pandas
+numpy
+scipy
+scikit-learn
+matplotlib
+bw2data
