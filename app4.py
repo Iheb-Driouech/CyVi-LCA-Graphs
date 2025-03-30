@@ -4,8 +4,29 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from matplotlib.patches import Patch
+import matplotlib.font_manager as fm
 
+# === Charger les polices personnalisées ===
+custom_fonts = {
+    "Arial": "fonts/arial.ttf",
+    "Times New Roman": "fonts/times.ttf",
+    "DejaVu Sans": "fonts/DejaVuSans.ttf",
+    "Verdana": "fonts/verdana.ttf",
+    "Calibri": "fonts/calibri.ttf"
+}
+
+
+# Dictionnaire pour stocker les noms reconnus par matplotlib
+available_font_names = {}
+
+for name, path in custom_fonts.items():
+    try:
+        prop = fm.FontProperties(fname=path)
+        plt.rcParams["font.family"] = prop.get_name()  # default
+        available_font_names[name] = prop.get_name()
+    except Exception as e:
+        st.warning(f"Font {name} could not be loaded: {e}")
+        
 ###############################
 #   Function Definitions
 ###############################
