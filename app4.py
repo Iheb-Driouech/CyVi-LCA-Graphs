@@ -10,7 +10,6 @@ import matplotlib.font_manager as fm
 custom_fonts = {
     "Arial": "fonts/arial.ttf",
     "Times New Roman": "fonts/times.ttf",
-    "DejaVu Sans": "fonts/DejaVuSans.ttf",
     "Verdana": "fonts/verdana.ttf",
     "Calibri": "fonts/calibri.ttf"
 }
@@ -36,7 +35,7 @@ font_styles = None  # sera rempli dans main()
 def get_font_styles():
     st.sidebar.subheader("🖋️ Font Style Settings")
 
-    family = st.sidebar.selectbox("Font Family", ["Arial", "Times New Roman", "DejaVu Sans", "Verdana", "Calibri"], index=0)
+    family = st.sidebar.selectbox("Font Family", ["Arial", "Times New Roman", "Verdana", "Calibri"], index=0)
     fontweight = st.sidebar.selectbox("Font Weight", ["normal", "bold"], index=1)
     fontstyle = st.sidebar.selectbox("Font Style", ["normal", "italic"], index=0)
 
