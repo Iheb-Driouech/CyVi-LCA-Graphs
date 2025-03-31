@@ -1270,7 +1270,7 @@ def main():
                 if generate_category_details and percentage_table is not None and total_impact_table is not None:
                     st.markdown("---")
                     st.header("Detailed Analysis by Impact Category")
-                    category_figures = plot_stacked_bar_by_category(percentage_table, total_impact_table)
+                    category_figures = plot_stacked_bar_by_category(initial_table, total_impact_table)
                     if category_figures:
                         for main_fig, legend_fig, category_name in category_figures:
                             st.subheader(f"Category: {category_name}")
