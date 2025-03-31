@@ -891,7 +891,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
         # Fonction interne pour créer un graphique
         def create_figure(show_totals=False):
-            fig, ax = plt.subplots(figsize=(16, 10), dpi=600)
+            fig, ax = plt.subplots(figsize=(16, 10), dpi=300)
             title = "Combined Scenarios Analysis"
             title += " (with Totals)" if show_totals else ""
             ax.set_title(title, fontsize=title_size, pad=80,
@@ -977,7 +977,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
 
         # Légende pour les contributions
-        legend_fig1, ax1 = plt.subplots(figsize=(6, 2), dpi=600)
+        legend_fig1, ax1 = plt.subplots(figsize=(6, 2), dpi=300)
         ax1.axis('off')
 
         contrib_handles = [
@@ -1001,7 +1001,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
 
         # Légende pour les scénarios
-        legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=600)
+        legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=300)
         ax2.axis('off')
 
         scenario_handles = [
@@ -1270,7 +1270,7 @@ def main():
 
                                             # 🔹 PNG export (600 DPI)
                                             buf_png = io.BytesIO()
-                                            fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                            fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
                                             col1.download_button(
                 label="📥 Télécharger PNG (600 DPI)",
                 data=buf_png.getvalue(),
@@ -1307,7 +1307,7 @@ def main():
 
                                            # 🔽 Main figure download
                                            buf_main_png = io.BytesIO()
-                                           main_fig.savefig(buf_main_png, format="png", dpi=600, bbox_inches='tight')
+                                           main_fig.savefig(buf_main_png, format="png", dpi=300, bbox_inches='tight')
                                            col_dl1.download_button(
                                                    label="📥 Courbe PNG (600 DPI)",
                                                    data=buf_main_png.getvalue(),
@@ -1332,7 +1332,7 @@ def main():
                                    col_leg1, col_leg2 = st.columns(2)
 
                                    buf_leg_png = io.BytesIO()
-                                   legend_fig.savefig(buf_leg_png, format="png", dpi=600, bbox_inches='tight')
+                                   legend_fig.savefig(buf_leg_png, format="png", dpi=300, bbox_inches='tight')
                                    col_leg1.download_button(
                 label="📥 Légende PNG (600 DPI)",
                 data=buf_leg_png.getvalue(),
@@ -1370,7 +1370,7 @@ def main():
 
                                          # 🔽 Main figure download
                                          buf_main_png = io.BytesIO()
-                                         main_fig.savefig(buf_main_png, format="png", dpi=600, bbox_inches='tight')
+                                         main_fig.savefig(buf_main_png, format="png", dpi=300, bbox_inches='tight')
                                          col_dl1.download_button(
                 label="📥 Courbe PNG (600 DPI)",
                 data=buf_main_png.getvalue(),
@@ -1395,7 +1395,7 @@ def main():
                                  col_leg1, col_leg2 = st.columns(2)
 
                                  buf_leg_png = io.BytesIO()
-                                 legend_fig.savefig(buf_leg_png, format="png", dpi=600, bbox_inches='tight')
+                                 legend_fig.savefig(buf_leg_png, format="png", dpi=300, bbox_inches='tight')
                                  col_leg1.download_button(
                 label="📥 Légende PNG (600 DPI)",
                 data=buf_leg_png.getvalue(),
@@ -1461,7 +1461,7 @@ def main():
                                       col1, col2 = st.columns(2)
                           
                                       buf_png = io.BytesIO()
-                                      fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                      fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
                                       col1.download_button(
                                           label="📥 Légende PNG (600 DPI)",
                                           data=buf_png.getvalue(),
@@ -1490,7 +1490,7 @@ def main():
                                       col1, col2 = st.columns(2)
                           
                                       buf_png = io.BytesIO()
-                                      fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                      fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
                                       col1.download_button(
                                           label="📥 PNG (600 DPI)",
                                           data=buf_png.getvalue(),
