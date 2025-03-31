@@ -979,71 +979,52 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         figures.append(("Chart with Totals", create_figure(show_totals=True)))
 
 
-        # 🔧 Paramètres de base
-        max_fontsize = 30
-        min_fontsize = 6
-        fontsize = max(min(legend_size, max_fontsize), min_fontsize)
-        square_size = 0.015 + fontsize * 0.001
+        # Légende pour les contributions
+        legend_fig1, ax1 = plt.subplots(figsize=(6, 2), dpi=300)
+        ax1.axis('off')
 
-        # 🔢 Données à afficher
-        contrib_items = list(contrib_color_map.items())
-        scenario_items = [(s.split("(")[-1].replace(")", "").strip(),
-                   scenario_color_map.get(s, "#fff"),
-                   scenario_hatch_dict.get(s, "")) for s in scenarios]
+        contrib_handles = [
+    plt.Rectangle((0, 0), 1, 1, facecolor=color, edgecolor='black')
+    for _, color in contrib_color_map.items()
+]
+        contrib_labels = list(contrib_color_map.keys())
 
-        # 🔄 Configuration dynamique
-        max_lines_per_col = max(4, int(30 - fontsize))  # + fontsize ↑ = moins de lignes/colonne
-        contrib_cols = math.ceil(len(contrib_items) / max_lines_per_col)
-        scenario_cols = math.ceil(len(scenario_items) / max_lines_per_col)
-        total_cols = contrib_cols + scenario_cols
+        ax1.legend(
+    contrib_handles,
+    contrib_labels,
+    title="Contributions",
+    fontsize=legend_size,
+    title_fontsize=legend_size,
+    ncol=2,
+    loc='center'
+)
+        figures.append(("Contributions Legend", legend_fig1))
 
-        # 🖼️ Taille dynamique de la figure
-        col_width = 0.22
-        fig_width = max(8, total_cols * col_width * 3)
-        fig_height = max(4, max(len(contrib_items), len(scenario_items)) * (fontsize * 0.045))
 
-        legend_fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.axis('off')
+        # Légende pour les scénarios
+        legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=300)
+        ax2.axis('off')
 
-        # 🎨 Zone de fond (boîte englobante)
-        bg_x = 0.03
-        bg_y = 0.02
-        bg_width = 0.94
-        bg_height = 0.93
-        box = Rectangle((bg_x, bg_y), bg_width, bg_height,
-                facecolor="#f5f5f5", edgecolor="black", linewidth=1.5)
-        ax.add_patch(box)
+        scenario_handles = [
+        plt.Rectangle((0, 0), 1, 1,
+                  facecolor=scenario_color_map[scenario],
+                  hatch=scenario_hatch_dict[scenario],
+                  edgecolor='black')
+        for scenario in scenarios
+]
+        scenario_labels = [s.split("(")[-1].replace(")", "").strip() for s in scenarios]
 
-        # 🔠 Titre centré
-        ax.text(0.5, 0.955, "Legend - Contributions & Scenarios",
-        fontsize=fontsize + 2, fontweight="bold", ha='center', va='top', family=fontfamily)
+        ax2.legend(
+    scenario_handles,
+    scenario_labels,
+    title="Scenarios",
+    fontsize=legend_size,
+    title_fontsize=legend_size,
+    ncol=2,
+    loc='center'
+)
+        figures.append(("Scenarios Legend", legend_fig2))
 
-        # 🔸 Affichage des contributions
-        for idx, (name, color) in enumerate(contrib_items):
-            col = idx // max_lines_per_col
-            row = idx % max_lines_per_col
-            x = 0.07 + col * col_width
-            y = 0.89 - row * (fontsize * 0.045)
-            ax.add_patch(Rectangle((x, y - square_size / 2), square_size, square_size,
-                           color=color, edgecolor='black'))
-            ax.text(x + square_size + 0.005, y, name, fontsize=fontsize,
-            va='center', ha='left', family=fontfamily)
-
-        # 🔸 Affichage des scénarios
-        for idx, (label, color, hatch) in enumerate(scenario_items):
-            col = idx // max_lines_per_col
-            row = idx % max_lines_per_col
-            x = 0.52 + col * col_width
-            y = 0.89 - row * (fontsize * 0.045)
-            ax.add_patch(Rectangle((x, y - square_size / 2), square_size, square_size,
-                           facecolor=color, hatch=hatch, edgecolor='black'))
-            ax.text(x + square_size + 0.005, y, label, fontsize=fontsize,
-            va='center', ha='left', family=fontfamily)
-
-        plt.tight_layout()
-        figures.append(("Combined Legend", legend_fig))
 
 
 
