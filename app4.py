@@ -980,7 +980,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
 
         # Légende pour les contributions
-        legend_fig1, ax1 = plt.subplots(figsize=(6, 2), dpi=600)
+        legend_fig1, ax1 = plt.subplots(figsize=(6, 2), dpi=300)
         ax1.axis('off')
 
         contrib_handles = [
