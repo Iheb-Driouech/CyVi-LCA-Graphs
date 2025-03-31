@@ -1147,11 +1147,11 @@ def main():
             sheet_names = excel_file.sheet_names
 
             # Choix de la feuille par l'utilisateur
-            selected_sheet = st.selectbox("📄 Choisissez la feuille à analyser :", sheet_names)
+            selected_sheet = st.selectbox("📄 Choose the sheet to analyze: :", sheet_names)
 
             # Affichage aperçu rapide (5 premières lignes)
             preview_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, nrows=5)
-            with st.expander("👁️ Aperçu de la feuille sélectionnée"):
+            with st.expander("👁️ Preview of the selected sheet"):
                 st.dataframe(preview_df)
             
             # Analyze the Excel file from a specified sheet (e.g., "Feuil2")
@@ -1180,17 +1180,17 @@ def main():
              font_styles = get_font_styles()
 
             # Interface de personnalisation dans la sidebar
-             st.sidebar.subheader("🎨 Personnalisation des couleurs")
-             customize_colors = st.sidebar.checkbox("Personnaliser les couleurs ?")
+             st.sidebar.subheader("🎨 Color customization")
+             customize_colors = st.sidebar.checkbox("Would you like to customize the colors?")
              
              if customize_colors:
-                st.sidebar.markdown("#### Couleurs des scénarios")
+                st.sidebar.markdown("#### Scenario colors")
                 for scen in scenario_names_cleaned:
                     scen_lower = scen.lower()
                     picked = st.sidebar.color_picker(f"🎯 {scen.capitalize()}", scenario_colors[scen_lower])
                     scenario_colors[scen_lower] = picked
 
-                st.sidebar.markdown("#### Couleurs des contributions")
+                st.sidebar.markdown("#### Contribution colors")
                 for contrib in contributions_list:
                     contrib_lower = contrib.lower()
                     picked = st.sidebar.color_picker(f"📦 {contrib}", contributions_colors[contrib_lower])
