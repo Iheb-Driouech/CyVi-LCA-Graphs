@@ -703,9 +703,9 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
         for category in categories:
             category_data = initial_table.loc[category]
             x_positions = np.arange(len(scenarios))*0.7
-            bar_width = 0.6 # réduit l'espace entre les barres
+            bar_width = 0.5 # réduit l'espace entre les barres
 
-            main_fig, main_ax = plt.subplots(figsize=(nombre_scenario, 7), dpi=300)
+            main_fig, main_ax = plt.subplots(figsize=(nombre_scenario, 6), dpi=300)
             legend_fig, legend_ax = plt.subplots(figsize=(5, 3), dpi=300)
 
             bottom_pos = np.zeros(len(scenarios))
