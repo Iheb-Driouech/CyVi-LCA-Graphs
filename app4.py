@@ -837,7 +837,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         x_positions = np.arange(len(categories))
 
         # Définir les hachures par scénario
-        hatches_list = ["//", "oo", "..", "xx", "--", "||", "++"]
+        hatches_list = ["//", "oo",  "xx", "--", "||", "++", "..",]
         scenario_hatch_dict = {
             scenario: hatches_list[i % len(hatches_list)]
             for i, scenario in enumerate(scenarios)
@@ -885,7 +885,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
             fig, ax = plt.subplots(figsize=(16, 10))
             title = "Combined Scenarios Analysis"
             title += " (with Totals)" if show_totals else ""
-            ax.set_title(title, fontsize=title_size, pad=20,
+            ax.set_title(title, fontsize=title_size, pad=80,
                          fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
 
             for i, scenario in enumerate(scenarios):
@@ -957,6 +957,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
             ax.set_ylabel("Contribution (%)", fontsize=label_size,
                           fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.axhline(0, color='black', linestyle='--', alpha=0.5)
+            ax.set_ylim(top=100)
             plt.tight_layout()
             return fig
 
