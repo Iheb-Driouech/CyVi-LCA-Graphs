@@ -255,7 +255,7 @@ def plot_comparison_bar_chart(total_impact_table):
             bars.append(bar[0])
             labels.append(scenario)
 
-        ax1.set_title("Comparison of Scenarios", fontsize=title_size,title_fontsize=legend_size, fontweight=fontweight,
+        ax1.set_title("Comparison of Scenarios", fontsize=title_size, title_fontsize=legend_size, fontweight=fontweight,
                       fontstyle=fontstyle, family=fontfamily, pad=30)
         ax1.set_ylabel("(%)", fontsize=label_size, fontweight=fontweight,
                        fontstyle=fontstyle, family=fontfamily)
@@ -975,50 +975,54 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         figures.append(("Main Chart", create_figure(show_totals=False)))
         figures.append(("Chart with Totals", create_figure(show_totals=True)))
 
-        from matplotlib.patches import Rectangle
 
-        # 📦 Nouvelle légende personnalisée avec colonnes
         legend_fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.axis('off')
 
-        # 🔹 Styles
-        title = "Legend - Contributions & Scenarios"
-        line_height = 0.06
-        text_x_contrib = 0.1
+        # 🔧 Paramètres dynamiques selon legend_size
+        line_height = legend_size * 0.007  # dépendant de la police
+        max_items = int((0.75 - 0.05) // line_height)  # éviter dépassement vertical
+        text_x_contrib = 0.08
         text_x_scenario = 0.55
 
         # 🔹 Titre centré
-        ax.text(0.5, 0.95, title, fontsize=legend_size, fontweight="bold",
-        ha='center', va='center', family=fontfamily)
+        ax.text(0.5, 0.95, "Legend - Contributions & Scenarios",
+        fontsize=legend_size, fontweight="bold", ha='center', va='center', family=fontfamily)
 
-        # 🔹 Titres des colonnes
-        ax.text(text_x_contrib, 0.88, "Contributions:", fontsize=legend_size, fontweight='bold', va='bottom', family=fontfamily)
-        ax.text(text_x_scenario, 0.88, "Scenarios:", fontsize=legend_size, fontweight='bold', va='bottom', family=fontfamily)
+        # 🔹 Sous-titres
+        ax.text(text_x_contrib, 0.90, "Contributions:", fontsize=legend_size,
+        fontweight='bold', va='bottom', family=fontfamily)
+        ax.text(text_x_scenario, 0.90, "Scenarios:", fontsize=legend_size,
+        fontweight='bold', va='bottom', family=fontfamily)
 
-        # 🔹 Contributions (à gauche)
+# 🔹 Contributions (à gauche)
         for i, (contrib, color) in enumerate(contrib_color_map.items()):
-          y = 0.85 - i * line_height
-          if y < 0.05:
+            if i >= max_items:
               break
-          ax.add_patch(Rectangle((text_x_contrib - 0.03, y - 0.02), 0.02, 0.02, color=color, edgecolor='black'))
-          ax.text(text_x_contrib, y, contrib, fontsize=legend_size, va='center', ha='left', family=fontfamily)
+            y = 0.88 - i * line_height
+            ax.add_patch(Rectangle((text_x_contrib - 0.03, y - 0.015), 0.02, 0.02,
+                           color=color, edgecolor='black'))
+            ax.text(text_x_contrib, y, contrib, fontsize=legend_size,
+            va='center', ha='left', family=fontfamily)
 
-       # 🔹 Scénarios (à droite)
+        # 🔹 Scénarios (à droite)
         for i, scenario in enumerate(scenarios):
-           y = 0.85 - i * line_height
-           if y < 0.05:
-              break
+           if i >= max_items:
+               break
+           y = 0.88 - i * line_height
            hatch = scenario_hatch_dict[scenario]
            facecolor = scenario_color_map.get(scenario, "#FFFFFF")
-           ax.add_patch(Rectangle((text_x_scenario - 0.03, y - 0.02), 0.02, 0.02,
+           ax.add_patch(Rectangle((text_x_scenario - 0.03, y - 0.015), 0.02, 0.02,
                            facecolor=facecolor, hatch=hatch, edgecolor='black'))
            scenario_label = scenario.split("(")[-1].replace(")", "").strip()
-           ax.text(text_x_scenario, y, scenario_label, fontsize=legend_size, va='center', ha='left', family=fontfamily)
+           ax.text(text_x_scenario, y, scenario_label, fontsize=legend_size,
+            va='center', ha='left', family=fontfamily)
 
         plt.tight_layout()
         figures.append(("Combined Legend", legend_fig))
+
 
 
         return figures
