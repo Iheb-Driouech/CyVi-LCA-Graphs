@@ -1024,7 +1024,11 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
     loc='center'
 )
         figures.append(("Scenarios Legend", legend_fig2))
+        st.subheader("Contributions Legend")
+        st.pyplot(legend_fig1)
 
+        st.subheader("Scenarios Legend")
+        st.pyplot(legend_fig2)
 
 
 
