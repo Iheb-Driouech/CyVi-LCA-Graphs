@@ -1483,34 +1483,76 @@ def main():
                               st.markdown("---")
                               st.header("Combined View of All Scenarios")
                               combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table)
+                          
                               if combined_figures:
-                                   for name, fig in combined_figures:
-                                        st.subheader(name)
-                                        st.pyplot(fig)
+                                  # 🔹 Extraire les légendes pour traitement séparé
+                                  legends = {"Contributions Legend": None, "Scenarios Legend": None}
+                                  figures = []
+                          
+                                  for name, fig in combined_figures:
+                                      if name in legends:
+                                          legends[name] = fig
+                                      else:
+                                          figures.append((name, fig))
 
-                                        col1, col2 = st.columns(2)
+                                  # 📌 Afficher et télécharger les légendes en premier
+                                  for legend_name, fig in legends.items():
+                                      st.subheader(legend_name)
+                                      st.pyplot(fig)
+                          
+                                      col1, col2 = st.columns(2)
+                          
+                                      buf_png = io.BytesIO()
+                                      fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                      col1.download_button(
+                                          label="📥 Légende PNG (600 DPI)",
+                                          data=buf_png.getvalue(),
+                                          file_name=f"{legend_name.replace(' ', '_').lower()}.png",
+                                          mime="image/png",
+                                          key=f"legend_png_{legend_name}"
+                                      )
+                          
+                                      buf_svg = io.BytesIO()
+                                      fig.savefig(buf_svg, format="svg", bbox_inches='tight')
+                                      col2.download_button(
+                                          label="📐 Légende SVG",
+                                          data=buf_svg.getvalue(),
+                                          file_name=f"{legend_name.replace(' ', '_').lower()}.svg",
+                                          mime="image/svg+xml",
+                                          key=f"legend_svg_{legend_name}"
+                                      )
+                          
+                                      st.markdown("---")
+                          
+                                  # 🔹 Afficher les figures principales avec téléchargement
+                                  for name, fig in figures:
+                                      st.subheader(name)
+                                      st.pyplot(fig)
+                          
+                                      col1, col2 = st.columns(2)
+                          
+                                      buf_png = io.BytesIO()
+                                      fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                      col1.download_button(
+                                          label="📥 PNG (600 DPI)",
+                                          data=buf_png.getvalue(),
+                                          file_name=f"{name.replace(' ', '_').lower()}.png",
+                                          mime="image/png",
+                                          key=f"combined_png_{name}"
+                                      )
+                          
+                                      buf_svg = io.BytesIO()
+                                      fig.savefig(buf_svg, format="svg", bbox_inches='tight')
+                                      col2.download_button(
+                                          label="📐 SVG",
+                                          data=buf_svg.getvalue(),
+                                          file_name=f"{name.replace(' ', '_').lower()}.svg",
+                                          mime="image/svg+xml",
+                                          key=f"combined_svg_{name}"
+                                      )
+                          
+                                      st.markdown("---")
 
-                                        buf_png = io.BytesIO()
-                                        fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
-                                        col1.download_button(
-                label="📥 PNG (600 DPI)",
-                data=buf_png.getvalue(),
-                file_name=f"{name.replace(' ', '_').lower()}.png",
-                mime="image/png",
-                key=f"combined_png_{name}"
-            )
-
-                                        buf_svg = io.BytesIO()
-                                        fig.savefig(buf_svg, format="svg", bbox_inches='tight')
-                                        col2.download_button(
-                label="📐 SVG",
-                data=buf_svg.getvalue(),
-                file_name=f"{name.replace(' ', '_').lower()}.svg",
-                mime="image/svg+xml",
-                key=f"combined_svg_{name}"
-            )
-
-                                        st.markdown("---")
 
 
         except Exception as e:
