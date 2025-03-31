@@ -6,26 +6,10 @@ import matplotlib.pyplot as plt
 import os
 import matplotlib.font_manager as fm
 
-# === Charger les polices personnalisées ===
-custom_fonts = {
-    "Arial": "fonts/arial.ttf",
-    "Times New Roman": "fonts/times.ttf",
-    "Verdana": "fonts/verdana.ttf",
-    "Calibri": "fonts/calibri.ttf"
-}
 
 
-# Dictionnaire pour stocker les noms reconnus par matplotlib
-available_font_names = {}
 
-for name, path in custom_fonts.items():
-    try:
-        fm.fontManager.addfont(path)  # 🔹 Enregistre la police pour matplotlib (important pour Streamlit Cloud)
-        prop = fm.FontProperties(fname=path)
-        plt.rcParams["font.family"] = prop.get_name()  # default
-        available_font_names[name] = prop.get_name()
-    except Exception as e:
-        st.warning(f"Font {name} could not be loaded: {e}")
+
         
 ###############################
 #   Function Definitions
@@ -36,7 +20,7 @@ font_styles = None  # sera rempli dans main()
 def get_font_styles():
     st.sidebar.subheader("🖋️ Font Style Settings")
 
-    family = st.sidebar.selectbox("Font Family", ["Arial", "Times New Roman", "Verdana", "Calibri"], index=0)
+    family = st.sidebar.selectbox("Font Family", ["DejaVu Sans", "sans-serif", "serif"], index=0)
     fontweight = st.sidebar.selectbox("Font Weight", ["normal", "bold"], index=1)
     fontstyle = st.sidebar.selectbox("Font Style", ["normal", "italic"], index=0)
 
