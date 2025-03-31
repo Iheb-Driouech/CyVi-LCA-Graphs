@@ -1167,7 +1167,8 @@ def main():
              contributions_list = extract_contributions_from_initial_table(initial_table)
 
              # Génération des couleurs par défaut
-             import matplotlib.colors as mcolors
+             from matplotlib import colors as mcolors
+
 
              def generate_default_colors(names, color_list):
                 return {name.lower(): color_list[i % len(color_list)] for i, name in enumerate(names)}
