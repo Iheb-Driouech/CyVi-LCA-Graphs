@@ -771,15 +771,8 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
                         continue
 
             # 🔹 Mise en forme
-            main_ax.set_title(
-                f"Contribution Analysis - Category: {category}",
-                fontsize=title_size,
-                pad=40,
-                fontweight=fontweight,
-                fontstyle=fontstyle,
-                family=fontfamily
-            )
-            main_ax.set_ylabel("Valeur réelle", fontsize=label_size,
+    
+            main_ax.set_ylabel(f"{category}", fontsize=label_size,
                                fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             main_ax.set_xticks(x_positions)
             main_ax.set_xticklabels(
