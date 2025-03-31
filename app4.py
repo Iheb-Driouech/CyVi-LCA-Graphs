@@ -263,6 +263,8 @@ def plot_comparison_bar_chart(total_impact_table):
         ax1.set_xticklabels(categories, rotation=45, ha="right", fontsize=label_size,
                             fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
         ax1.grid(axis="y", linestyle="--", alpha=0.7)
+        ax1.tick_params(axis='y', labelsize=label_size)
+
         plt.tight_layout()
         figs.append(fig1)
         plt.close(fig1)
@@ -318,6 +320,8 @@ def plot_comparison_bar_chart(total_impact_table):
         ax3.set_xticklabels(categories, rotation=45, ha="right", fontsize=label_size,
                             fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
         ax3.grid(axis="y", linestyle="--", alpha=0.7)
+        ax3.tick_params(axis='y', labelsize=label_size)
+
         plt.tight_layout()
         figs.append(fig3)
         plt.close(fig3)
@@ -463,6 +467,7 @@ def plot_relative_contribution_by_scenario(scenario_tables):
                 family=fontfamily
             )
             main_ax.grid(axis="y", linestyle="--", alpha=0.7)
+            main_ax.tick_params(axis='y', labelsize=label_size)
             plt.tight_layout()
 
             legend_ax.axis("off")
@@ -618,6 +623,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
                 family=fontfamily
             )
             main_ax.grid(axis="x", linestyle="--", alpha=0.7)
+            main_ax.tick_params(axis='x', labelsize=label_size)
             plt.tight_layout()
 
             legend_ax.axis("off")
@@ -787,6 +793,7 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
 
             main_ax.set_xlim(x_positions[0] - (bar_width / 2), x_positions[-1] + (bar_width / 2))
             main_ax.grid(axis="y", linestyle="--", alpha=0.7)
+            main_ax.tick_params(axis='y', labelsize=label_size)
             plt.tight_layout()
 
             legend_ax.axis("off")
@@ -887,6 +894,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
             title += " (with Totals)" if show_totals else ""
             ax.set_title(title, fontsize=title_size, pad=80,
                          fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
+            ax.tick_params(axis='y', labelsize=label_size)
 
             for i, scenario in enumerate(scenarios):
                 bottom_pos = np.zeros(len(categories))
