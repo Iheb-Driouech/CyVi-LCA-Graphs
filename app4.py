@@ -21,7 +21,7 @@ def get_font_styles():
     st.sidebar.subheader("🖋️ Font Style Settings")
 
     family = st.sidebar.selectbox("Font Family", ["DejaVu Sans", "sans-serif", "serif"], index=0)
-    fontweight = st.sidebar.selectbox("Font Weight", ["normal", "bold"], index=1)
+    fontweight = st.sidebar.selectbox("Font Weight", ["normal", "bold"], index=0)
     fontstyle = st.sidebar.selectbox("Font Style", ["normal", "italic"], index=0)
 
     title_size = st.sidebar.slider("Title Font Size", 10, 30, 16)
@@ -305,7 +305,7 @@ def plot_comparison_bar_chart(total_impact_table):
                     fontweight=fontweight,
                     fontstyle=fontstyle,
                     family=fontfamily,
-                    rotation=90 if abs(total_value) < 0.01 else 0,
+                    rotation=90,
                 )
 
         ax3.set_title("Comparison of Scenarios (with Totals)", fontsize=title_size, fontweight=fontweight,
