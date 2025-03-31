@@ -20,6 +20,7 @@ available_font_names = {}
 
 for name, path in custom_fonts.items():
     try:
+        fm.fontManager.addfont(path)  # 🔹 Enregistre la police pour matplotlib (important pour Streamlit Cloud)
         prop = fm.FontProperties(fname=path)
         plt.rcParams["font.family"] = prop.get_name()  # default
         available_font_names[name] = prop.get_name()
