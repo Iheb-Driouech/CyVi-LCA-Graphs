@@ -1024,14 +1024,6 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 )
         legend2.get_frame().set_linewidth(0)
         figures.append(("Scenarios Legend", legend_fig2))
-        st.subheader("Contributions Legend")
-        st.pyplot(legend_fig1)
-
-        st.subheader("Scenarios Legend")
-        st.pyplot(legend_fig2)
-
-
-
         return figures
 
     except Exception as e:
@@ -1268,7 +1260,7 @@ def main():
 
                                             col1, col2 = st.columns(2)
 
-                                            # 🔹 PNG export (600 DPI)
+                                            # 🔹 PNG export (300 DPI)
                                             buf_png = io.BytesIO()
                                             fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
                                             col1.download_button(
@@ -1461,9 +1453,9 @@ def main():
                                       col1, col2 = st.columns(2)
                           
                                       buf_png = io.BytesIO()
-                                      legend_fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                      legend_fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
                                       col1.download_button(
-                                          label="📥 Légende PNG (600 DPI)",
+                                          label="📥 Légende PNG (300 DPI)",
                                           data=buf_png.getvalue(),
                                           file_name=f"{legend_name.replace(' ', '_').lower()}.png",
                                           mime="image/png",
@@ -1490,9 +1482,9 @@ def main():
                                       col1, col2 = st.columns(2)
                           
                                       buf_png = io.BytesIO()
-                                      fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                      fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
                                       col1.download_button(
-                                          label="📥 PNG (600 DPI)",
+                                          label="📥 PNG (300 DPI)",
                                           data=buf_png.getvalue(),
                                           file_name=f"{name.replace(' ', '_').lower()}.png",
                                           mime="image/png",
