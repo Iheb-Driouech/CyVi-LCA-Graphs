@@ -989,7 +989,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 ]
         contrib_labels = list(contrib_color_map.keys())
 
-        ax1.legend(
+        legend1 =ax1.legend(
     contrib_handles,
     contrib_labels,
     title="Contributions",
@@ -998,6 +998,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
     ncol=2,
     loc='center'
 )
+        legend1.get_frame().set_linewidth(0) 
+        
         figures.append(("Contributions Legend", legend_fig1))
 
 
@@ -1014,7 +1016,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 ]
         scenario_labels = [s.split("(")[-1].replace(")", "").strip() for s in scenarios]
 
-        ax2.legend(
+        legend2 = ax2.legend(
     scenario_handles,
     scenario_labels,
     title="Scenarios",
@@ -1023,6 +1025,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
     ncol=2,
     loc='center'
 )
+        legend2.get_frame().set_linewidth(0)
         figures.append(("Scenarios Legend", legend_fig2))
         st.subheader("Contributions Legend")
         st.pyplot(legend_fig1)
