@@ -703,7 +703,7 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
             bar_width = 0.5 # réduit l'espace entre les barres
 
             main_fig, main_ax = plt.subplots(figsize=(12, 7))
-            legend_fig, legend_ax = plt.subplots(figsize=(5, 3))
+            legend_fig, legend_ax = plt.subplots(figsize=(4, 3))
 
             bottom_pos = np.zeros(len(scenarios))
             bottom_neg = np.zeros(len(scenarios))
