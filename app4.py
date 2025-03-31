@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import matplotlib.font_manager as fm
+from matplotlib.patches import Rectangle
+
 
 
 
@@ -234,7 +236,7 @@ def plot_comparison_bar_chart(total_impact_table):
                 }
 
         # Figure 1: Main bar chart (no totals)
-        fig1, ax1 = plt.subplots(figsize=(12, 7))
+        fig1, ax1 = plt.subplots(figsize=(12, 7), dpi=300)
         bars = []
         labels = []
 
@@ -270,7 +272,7 @@ def plot_comparison_bar_chart(total_impact_table):
         plt.close(fig1)
 
         # Figure 2: Legend
-        fig2, ax2 = plt.subplots(figsize=(5, 3))
+        fig2, ax2 = plt.subplots(figsize=(5, 3), dpi=300)
         ax2.axis("off")
         ax2.legend(bars, labels, title="Scenarios", fontsize=legend_size, loc="center")
         plt.tight_layout()
@@ -278,7 +280,7 @@ def plot_comparison_bar_chart(total_impact_table):
         plt.close(fig2)
 
         # Figure 3: With totals
-        fig3, ax3 = plt.subplots(figsize=(12, 7))
+        fig3, ax3 = plt.subplots(figsize=(12, 7), dpi=300)
         for i, scenario in enumerate(scenarios):
             key = scenario.strip().lower()
             color = (
@@ -388,8 +390,8 @@ def plot_relative_contribution_by_scenario(scenario_tables):
 
         # Génération des graphiques
         for scenario_name, table in scenario_tables.items():
-            main_fig, main_ax = plt.subplots(figsize=(16, 8))
-            legend_fig, legend_ax = plt.subplots(figsize=(5, 3))
+            main_fig, main_ax = plt.subplots(figsize=(16, 8), dpi=300)
+            legend_fig, legend_ax = plt.subplots(figsize=(5, 3), dpi=300)
             
             categories = table["Impact Category"]
             contribution_columns = [
@@ -541,8 +543,8 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
 
         # Génération des graphiques
         for scenario_name, table in scenario_tables.items():
-            main_fig, main_ax = plt.subplots(figsize=(10, 12))
-            legend_fig, legend_ax = plt.subplots(figsize=(5, 3))
+            main_fig, main_ax = plt.subplots(figsize=(10, 12), dpi=300)
+            legend_fig, legend_ax = plt.subplots(figsize=(5, 3), dpi=300)
 
             categories = table["Impact Category"]
             contribution_columns = [
@@ -604,7 +606,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
                 )
 
             main_ax.set_title(
-                f"Horizontal Contributions - {scenario_name.capitalize()}",
+                f"Relative Contributions - {scenario_name.capitalize()}",
                 fontsize=title_size,
                 pad=30,
                 fontweight=fontweight,
@@ -702,8 +704,8 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
             x_positions = np.arange(len(scenarios))*0.8
             bar_width = 0.5 # réduit l'espace entre les barres
 
-            main_fig, main_ax = plt.subplots(figsize=(10, 7))
-            legend_fig, legend_ax = plt.subplots(figsize=(5, 3))
+            main_fig, main_ax = plt.subplots(figsize=(10, 7), dpi=300)
+            legend_fig, legend_ax = plt.subplots(figsize=(5, 3), dpi=300)
 
             bottom_pos = np.zeros(len(scenarios))
             bottom_neg = np.zeros(len(scenarios))
@@ -889,7 +891,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
         # Fonction interne pour créer un graphique
         def create_figure(show_totals=False):
-            fig, ax = plt.subplots(figsize=(16, 10))
+            fig, ax = plt.subplots(figsize=(16, 10), dpi=300)
             title = "Combined Scenarios Analysis"
             title += " (with Totals)" if show_totals else ""
             ax.set_title(title, fontsize=title_size, pad=80,
@@ -973,35 +975,51 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         figures.append(("Main Chart", create_figure(show_totals=False)))
         figures.append(("Chart with Totals", create_figure(show_totals=True)))
 
-        # Légende combinée
-        legend_fig, ax = plt.subplots(figsize=(8, 4))
+        from matplotlib.patches import Rectangle
+
+        # 📦 Nouvelle légende personnalisée avec colonnes
+        legend_fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
         ax.axis('off')
 
-        contrib_handles = [
-            plt.Rectangle((0, 0), 1, 1, facecolor=color, edgecolor='black')
-            for _, color in contrib_color_map.items()
-        ]
-        scenario_handles = [
-            plt.Rectangle(
-                (0, 0),
-                1,
-                1,
-                facecolor=scenario_color_map[scenario],
-                hatch=scenario_hatch_dict[scenario],
-                edgecolor='black'
-            )
-            for scenario in scenarios
-        ]
+        # 🔹 Styles
+        title = "Legend - Contributions & Scenarios"
+        line_height = 0.06
+        text_x_contrib = 0.1
+        text_x_scenario = 0.55
 
-        ax.legend(
-            contrib_handles + scenario_handles,
-            list(contrib_color_map.keys()) + [s.split("(")[-1].replace(")", "").strip() for s in scenarios],
-            title="Legend - Contributions & Scenarios",
-            ncol=2,
-            fontsize=legend_size,title_fontsize=legend_size, 
-            loc='center'
-        )
+        # 🔹 Titre centré
+        ax.text(0.5, 0.95, title, fontsize=legend_size, fontweight="bold",
+        ha='center', va='center', family=fontfamily)
+
+        # 🔹 Titres des colonnes
+        ax.text(text_x_contrib, 0.88, "Contributions:", fontsize=legend_size, fontweight='bold', va='bottom', family=fontfamily)
+        ax.text(text_x_scenario, 0.88, "Scenarios:", fontsize=legend_size, fontweight='bold', va='bottom', family=fontfamily)
+
+        # 🔹 Contributions (à gauche)
+        for i, (contrib, color) in enumerate(contrib_color_map.items()):
+          y = 0.85 - i * line_height
+          if y < 0.05:
+              break
+          ax.add_patch(Rectangle((text_x_contrib - 0.03, y - 0.02), 0.02, 0.02, color=color, edgecolor='black'))
+          ax.text(text_x_contrib, y, contrib, fontsize=legend_size, va='center', ha='left', family=fontfamily)
+
+       # 🔹 Scénarios (à droite)
+        for i, scenario in enumerate(scenarios):
+           y = 0.85 - i * line_height
+           if y < 0.05:
+              break
+           hatch = scenario_hatch_dict[scenario]
+           facecolor = scenario_color_map.get(scenario, "#FFFFFF")
+           ax.add_patch(Rectangle((text_x_scenario - 0.03, y - 0.02), 0.02, 0.02,
+                           facecolor=facecolor, hatch=hatch, edgecolor='black'))
+           scenario_label = scenario.split("(")[-1].replace(")", "").strip()
+           ax.text(text_x_scenario, y, scenario_label, fontsize=legend_size, va='center', ha='left', family=fontfamily)
+
+        plt.tight_layout()
         figures.append(("Combined Legend", legend_fig))
+
 
         return figures
 
