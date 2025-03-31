@@ -275,7 +275,7 @@ def plot_comparison_bar_chart(total_impact_table):
         # Figure 2: Legend
         fig2, ax2 = plt.subplots(figsize=(5, 3), dpi=300)
         ax2.axis("off")
-        ax2.legend(bars, labels, title="Scenarios", fontsize=legend_size, loc="center")
+        ax2.legend(bars, labels, title="Scenarios", fontsize=legend_size, title_fontsize=legend_size, loc="center")
         plt.tight_layout()
         figs.append(fig2)
         plt.close(fig2)
