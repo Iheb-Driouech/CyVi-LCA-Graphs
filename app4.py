@@ -1121,6 +1121,8 @@ def main():
     - Each scenario can include multiple contributions.
     - A contribution can appear in several scenarios.
     - You can include as many impact categories as needed.
+    
+    🔎 **Note**: The Excel file already contains examples data to help you visualize the kind of charts that will be generated.
     """)
 
     with open("assets/template_LCA.xlsx", "rb") as f:
@@ -1147,7 +1149,7 @@ def main():
             sheet_names = excel_file.sheet_names
 
             # Choix de la feuille par l'utilisateur
-            selected_sheet = st.selectbox("📄 Choose the sheet to analyze: :", sheet_names)
+            selected_sheet = st.selectbox("📄 Choose the sheet to analyze", sheet_names)
 
             # Affichage aperçu rapide (5 premières lignes)
             preview_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, nrows=5)
