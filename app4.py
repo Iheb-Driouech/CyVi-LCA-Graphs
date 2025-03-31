@@ -1171,7 +1171,8 @@ def main():
 
 
              def generate_default_colors(names, color_list):
-                return {name.lower(): color_list[i % len(color_list)] for i, name in enumerate(names)}
+                hex_colors = [mcolors.to_hex(c) for c in color_list]
+                return {name.lower(): hex_colors[i % len(hex_colors)] for i, name in enumerate(names)}
              basic_contribution_palette = plt.get_cmap("Set3").colors  # ou "Pastel1"
 
              default_scenario_colors = generate_default_colors(scenario_names_cleaned, list(mcolors.TABLEAU_COLORS.values()))
