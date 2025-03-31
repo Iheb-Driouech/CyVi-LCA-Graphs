@@ -1171,9 +1171,10 @@ def main():
 
              def generate_default_colors(names, color_list):
                 return {name.lower(): color_list[i % len(color_list)] for i, name in enumerate(names)}
+             basic_contribution_palette = plt.get_cmap("Set3").colors  # ou "Pastel1"
 
              default_scenario_colors = generate_default_colors(scenario_names_cleaned, list(mcolors.TABLEAU_COLORS.values()))
-             default_contribution_colors = generate_default_colors(contributions_list, list(mcolors.CSS4_COLORS.values()))
+             default_contribution_colors = generate_default_colors(contributions_list, basic_contribution_palette)
 
             # Dictionnaires globaux modifiables
              global scenario_colors, contributions_colors, font_styles
