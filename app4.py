@@ -255,8 +255,9 @@ def plot_comparison_bar_chart(total_impact_table):
             bars.append(bar[0])
             labels.append(scenario)
 
-        ax1.set_title("Comparison of Scenarios", fontsize=title_size, title_fontsize=legend_size, fontweight=fontweight,
-                      fontstyle=fontstyle, family=fontfamily, pad=30)
+        ax1.set_title("Comparison of Scenarios", fontsize=title_size, fontweight=fontweight,
+              fontstyle=fontstyle, family=fontfamily, pad=30)
+
         ax1.set_ylabel("(%)", fontsize=label_size, fontweight=fontweight,
                        fontstyle=fontstyle, family=fontfamily)
         ax1.set_ylim(0, 100)
