@@ -1416,67 +1416,25 @@ def main():
 
                                st.markdown("---")
 
-                          # 4) Category-by-Category Charts
+                # 4) Category-by-Category Charts
                           if generate_category_details and percentage_table is not None and total_impact_table is not None:
-                                  st.markdown("---")
-                                  st.header("Detailed Analysis by Impact Category")
-                                  category_figures = plot_stacked_bar_by_category(initial_table, total_impact_table)
-                                  if category_figures:
-                                      for main_fig, legend_fig, category_name in category_figures:
-                                          st.subheader(f"Category: {category_name}")
+                                              st.markdown("---")
+                                              st.header("Detailed Analysis by Impact Category")
+                                              category_figures = plot_stacked_bar_by_category(initial_table, total_impact_table)
+                                              if category_figures:
+                                                  for main_fig, legend_fig, category_name in category_figures:
+                                                      st.subheader(f"Category: {category_name}")
+                          
+                                                      col1, col2 = st.columns([4, 1])
+                                                      with col1:
+                                                          st.pyplot(main_fig)
+                                                      with col2:
+                                                          st.pyplot(legend_fig)
+                          
+                                                      plt.close(main_fig)
+                                                      plt.close(legend_fig)
 
-                                          col1, col2 = st.columns([4, 1])
-                                          with col1:
-                                              st.pyplot(main_fig)
-
-                                              col_dl1, col_dl2 = st.columns(2)
-
-                                              buf_main_png = io.BytesIO()
-                                              main_fig.savefig(buf_main_png, format="png", dpi=600, bbox_inches='tight')
-                                              col_dl1.download_button(
-                    label="📥 Courbe PNG (600 DPI)",
-                    data=buf_main_png.getvalue(),
-                    file_name=f"{category_name}_stacked.png",
-                    mime="image/png",
-                    key=f"stacked_png_{category_name}"
-                )
-
-                                              buf_main_svg = io.BytesIO()
-                                              main_fig.savefig(buf_main_svg, format="svg", bbox_inches='tight')
-                                              col_dl2.download_button(
-                    label="📐 Courbe SVG",
-                    data=buf_main_svg.getvalue(),
-                    file_name=f"{category_name}_stacked.svg",
-                    mime="image/svg+xml",
-                    key=f"stacked_svg_{category_name}"
-                )
-
-                                          with col2:
-                                               st.pyplot(legend_fig)
-
-                                               col_leg1, col_leg2 = st.columns(2)
-
-                                               buf_leg_png = io.BytesIO()
-                                               legend_fig.savefig(buf_leg_png, format="png", dpi=600, bbox_inches='tight')
-                                               col_leg1.download_button(
-                    label="📥 Légende PNG (600 DPI)",
-                    data=buf_leg_png.getvalue(),
-                    file_name=f"{category_name}_legend_stacked.png",
-                    mime="image/png",
-                    key=f"legend_stacked_png_{category_name}"
-                )
-
-                                               buf_leg_svg = io.BytesIO()
-                                               legend_fig.savefig(buf_leg_svg, format="svg", bbox_inches='tight')
-                                               col_leg2.download_button(
-                    label="📐 Légende SVG",
-                    data=buf_leg_svg.getvalue(),
-                    file_name=f"{category_name}_legend_stacked.svg",
-                    mime="image/svg+xml",
-                    key=f"legend_stacked_svg_{category_name}"
-                )
-
-                                          st.markdown("---")
+                                                      st.markdown("---")
 
                           # 5) Combined Charts
                           if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
