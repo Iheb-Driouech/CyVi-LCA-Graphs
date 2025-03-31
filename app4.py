@@ -1130,7 +1130,7 @@ def main():
     st.markdown(
     """
     <h1 style='text-align: center; font-size: 3em;'>
-        LCA Impact Dashboard – CyVi Edition 🌍
+        LCA Graph Dashboard
     </h1>
     <p style='text-align: center; font-size: 1.1em;'>
         
@@ -1244,132 +1244,274 @@ def main():
                     contributions_colors[contrib_lower] = picked
              
              if initial_table is not None:
-                scenario_tables = generate_tables_by_scenario(initial_table, scenario_names_cleaned)
-                percentage_table = generate_percentage_table(initial_table, total_impact_table)
+                          scenario_tables = generate_tables_by_scenario(initial_table, scenario_names_cleaned)
+                          percentage_table = generate_percentage_table(initial_table, total_impact_table)
 
-                st.subheader("Select Charts to Generate")
-                generate_scenario_comparison = st.checkbox("Generate Scenario Comparison Charts")
-                generate_scenario_details = st.checkbox("Generate Detailed Scenario Charts (Vertical)")
-                generate_scenario_details_horizontal = st.checkbox("Generate Detailed Scenario Charts (Horizontal)")
-                generate_category_details = st.checkbox("Generate Category-by-Category Charts")
-                generate_combined_charts = st.checkbox("Generate Combined Charts")
+                          st.subheader("Select Charts to Generate")
+                          generate_scenario_comparison = st.checkbox("Generate Scenario Comparison Charts")
+                          generate_scenario_details = st.checkbox("Generate Detailed Scenario Charts (Vertical)")
+                          generate_scenario_details_horizontal = st.checkbox("Generate Detailed Scenario Charts (Horizontal)")
+                          generate_category_details = st.checkbox("Generate Category-by-Category Charts")
+                          generate_combined_charts = st.checkbox("Generate Combined Charts")
 
                 # 1) Scenario Comparison
-                if generate_scenario_comparison and total_impact_table is not None:
-                    st.markdown("---")
-                    st.header("Scenario Comparison")
-                    comparison_figures = plot_comparison_bar_chart(total_impact_table)
-                    if comparison_figures:
-                         titles = ["Main Scenario Comparison", "Legend", "Scenario Comparison (with Totals)"]
+                          if generate_scenario_comparison and total_impact_table is not None:
+                                st.markdown("---")
+                                st.header("Scenario Comparison")
+                                comparison_figures = plot_comparison_bar_chart(total_impact_table)
+                                if comparison_figures:
+                                     titles = ["Main Scenario Comparison", "Legend", "Scenario Comparison (with Totals)"]
 
-                         for i, fig in enumerate(comparison_figures):
-                              st.subheader(titles[i])
-                              st.pyplot(fig)
+                                     for i, fig in enumerate(comparison_figures):
+                                            st.subheader(titles[i])
+                                            st.pyplot(fig)
 
-                              col1, col2 = st.columns(2)
+                                            col1, col2 = st.columns(2)
 
-                              # 🔹 PNG export (600 DPI)
-                              buf_png = io.BytesIO()
-                              fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
-                              col1.download_button(
-            label="📥 Télécharger PNG (600 DPI)",
-            data=buf_png.getvalue(),
-            file_name=f"{titles[i].replace(' ', '_').lower()}.png",
-            mime="image/png",
-            key=f"png_button_{i}"
-        )
+                                            # 🔹 PNG export (600 DPI)
+                                            buf_png = io.BytesIO()
+                                            fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                            col1.download_button(
+                label="📥 Télécharger PNG (600 DPI)",
+                data=buf_png.getvalue(),
+                file_name=f"{titles[i].replace(' ', '_').lower()}.png",
+                mime="image/png",
+                key=f"png_button_{i}"
+            )
 
-        # 🔹 SVG export
-                              buf_svg = io.BytesIO()
-                              fig.savefig(buf_svg, format="svg", bbox_inches='tight')
-                              col2.download_button(
-            label="📐 Télécharger SVG (vectoriel)",
-            data=buf_svg.getvalue(),
-            file_name=f"{titles[i].replace(' ', '_').lower()}.svg",
-            mime="image/svg+xml",
-            key=f"svg_button_{i}"
-        )
+                                           # 🔹 SVG export
+                                            buf_svg = io.BytesIO()
+                                            fig.savefig(buf_svg, format="svg", bbox_inches='tight')
+                                            col2.download_button(
+                label="📐 Télécharger SVG (vectoriel)",
+                data=buf_svg.getvalue(),
+                file_name=f"{titles[i].replace(' ', '_').lower()}.svg",
+                mime="image/svg+xml",
+                key=f"svg_button_{i}"
+            )
 
-                # 2) Detailed Scenario Charts (vertical)
-                if generate_scenario_details and scenario_tables:
-                    st.markdown("---")
-                    st.header("Detailed Analysis by Scenario (Vertical)")
-                    scenario_figures = plot_relative_contribution_by_scenario(scenario_tables)
-                    for idx, (main_fig, legend_fig) in enumerate(scenario_figures):
-                        scenario_name = list(scenario_tables.keys())[idx]
-                        st.subheader(f"Scenario: {scenario_name}")
+                        # 2) Detailed Scenario Charts (vertical)
+                          if generate_scenario_details and scenario_tables:
+                               st.markdown("---")
+                               st.header("Detailed Analysis by Scenario (Vertical)")
+                               scenario_figures = plot_relative_contribution_by_scenario(scenario_tables)
+                               for idx, (main_fig, legend_fig) in enumerate(scenario_figures):
+                                      scenario_name = list(scenario_tables.keys())[idx]
+                                      st.subheader(f"Scenario: {scenario_name}")
 
-                        col1, col2 = st.columns([4, 1])
-                        with col1:
-                            st.pyplot(main_fig)
-                        with col2:
-                            st.pyplot(legend_fig)
+                                      col1, col2 = st.columns([4, 1])
+                                      with col1:
+                                           st.pyplot(main_fig)
 
-                        st.markdown("---")
+                                           col_dl1, col_dl2 = st.columns(2)
 
-                # 3) Detailed Scenario Charts (horizontal)
-                if generate_scenario_details_horizontal and scenario_tables:
-                    st.markdown("---")
-                    st.header("Detailed Analysis by Scenario (Horizontal)")
-                    horizontal_figures = plot_relative_contribution_by_scenario_horizontal(scenario_tables)
-                    for idx, (main_fig, legend_fig) in enumerate(horizontal_figures):
-                        scenario_name = list(scenario_tables.keys())[idx]
-                        st.subheader(f"Scenario: {scenario_name} (Horizontal)")
+                                           # 🔽 Main figure download
+                                           buf_main_png = io.BytesIO()
+                                           main_fig.savefig(buf_main_png, format="png", dpi=600, bbox_inches='tight')
+                                           col_dl1.download_button(
+                                                   label="📥 Courbe PNG (600 DPI)",
+                                                   data=buf_main_png.getvalue(),
+                                                   file_name=f"{scenario_name}_vertical.png",
+                                                   mime="image/png",
+                                                   key=f"vertical_png_{scenario_name}"
+            )
 
-                        col1, col2 = st.columns([4, 1])
-                        with col1:
-                            st.pyplot(main_fig)
-                        with col2:
-                            st.pyplot(legend_fig)
+                                           buf_main_svg = io.BytesIO()
+                                           main_fig.savefig(buf_main_svg, format="svg", bbox_inches='tight')
+                                           col_dl2.download_button(
+                label="📐 Courbe SVG",
+                data=buf_main_svg.getvalue(),
+                file_name=f"{scenario_name}_vertical.svg",
+                mime="image/svg+xml",
+                key=f"vertical_svg_{scenario_name}"
+            )
 
-                        st.markdown("---")
+                               with col2:
+                                   st.pyplot(legend_fig)
 
-                # 4) Category-by-Category Charts
-                if generate_category_details and percentage_table is not None and total_impact_table is not None:
-                    st.markdown("---")
-                    st.header("Detailed Analysis by Impact Category")
-                    category_figures = plot_stacked_bar_by_category(initial_table, total_impact_table)
-                    if category_figures:
-                        for main_fig, legend_fig, category_name in category_figures:
-                            st.subheader(f"Category: {category_name}")
+                                   col_leg1, col_leg2 = st.columns(2)
 
-                            col1, col2 = st.columns([4, 1])
-                            with col1:
-                                st.pyplot(main_fig)
-                            with col2:
-                                st.pyplot(legend_fig)
+                                   buf_leg_png = io.BytesIO()
+                                   legend_fig.savefig(buf_leg_png, format="png", dpi=600, bbox_inches='tight')
+                                   col_leg1.download_button(
+                label="📥 Légende PNG (600 DPI)",
+                data=buf_leg_png.getvalue(),
+                file_name=f"{scenario_name}_legend_vertical.png",
+                mime="image/png",
+                key=f"legend_vertical_png_{scenario_name}"
+            )
 
-                            plt.close(main_fig)
-                            plt.close(legend_fig)
+                                   buf_leg_svg = io.BytesIO()
+                                   legend_fig.savefig(buf_leg_svg, format="svg", bbox_inches='tight')
+                                   col_leg2.download_button(
+                label="📐 Légende SVG",
+                data=buf_leg_svg.getvalue(),
+                file_name=f"{scenario_name}_legend_vertical.svg",
+                mime="image/svg+xml",
+                key=f"legend_vertical_svg_{scenario_name}"
+            )
 
-                            st.markdown("---")
+                               st.markdown("---")
 
-                # 5) Combined Charts
-                if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
-                    st.markdown("---")
-                    st.header("Combined View of All Scenarios")
-                    combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table)
-                    if combined_figures:
-                        # Display main chart
-                        for name, fig in combined_figures:
-                            if name == "Main Chart":
-                                st.subheader("Main Scenario Comparison")
-                                st.pyplot(fig)
-                                plt.close(fig)
+                          # 3) Detailed Scenario Charts (horizontal)
+                          if generate_scenario_details_horizontal and scenario_tables:
+                               st.markdown("---")
+                               st.header("Detailed Analysis by Scenario (Horizontal)")
+                               horizontal_figures = plot_relative_contribution_by_scenario_horizontal(scenario_tables)
+                               for idx, (main_fig, legend_fig) in enumerate(horizontal_figures):
+                                    scenario_name = list(scenario_tables.keys())[idx]
+                                    st.subheader(f"Scenario: {scenario_name} (Horizontal)")
 
-                        # Display combined legend
-                        for name, fig in combined_figures:
-                            if name == "Combined Legend":
-                                st.subheader("Legend")
-                                st.pyplot(fig)
-                                plt.close(fig)
+                                    col1, col2 = st.columns([4, 1])
+                                    with col1:
+                                         st.pyplot(main_fig)
 
-                        # Display chart with totals
-                        for name, fig in combined_figures:
-                            if name == "Chart with Totals":
-                                st.subheader("Scenario Comparison (with Totals)")
-                                st.pyplot(fig)
-                                plt.close(fig)
+                                         col_dl1, col_dl2 = st.columns(2)
+
+                                         # 🔽 Main figure download
+                                         buf_main_png = io.BytesIO()
+                                         main_fig.savefig(buf_main_png, format="png", dpi=600, bbox_inches='tight')
+                                         col_dl1.download_button(
+                label="📥 Courbe PNG (600 DPI)",
+                data=buf_main_png.getvalue(),
+                file_name=f"{scenario_name}_horizontal.png",
+                mime="image/png",
+                key=f"horizontal_png_{scenario_name}"
+            )
+
+                                         buf_main_svg = io.BytesIO()
+                                         main_fig.savefig(buf_main_svg, format="svg", bbox_inches='tight')
+                                         col_dl2.download_button(
+                                  label="📐 Courbe SVG",
+                data=buf_main_svg.getvalue(),
+                file_name=f"{scenario_name}_horizontal.svg",
+                mime="image/svg+xml",
+                key=f"horizontal_svg_{scenario_name}"
+            )
+
+                               with col2:
+                                 st.pyplot(legend_fig)
+
+                                 col_leg1, col_leg2 = st.columns(2)
+
+                                 buf_leg_png = io.BytesIO()
+                                 legend_fig.savefig(buf_leg_png, format="png", dpi=600, bbox_inches='tight')
+                                 col_leg1.download_button(
+                label="📥 Légende PNG (600 DPI)",
+                data=buf_leg_png.getvalue(),
+                file_name=f"{scenario_name}_legend_horizontal.png",
+                mime="image/png",
+                key=f"legend_horizontal_png_{scenario_name}"
+            )
+
+                                 buf_leg_svg = io.BytesIO()
+                                 legend_fig.savefig(buf_leg_svg, format="svg", bbox_inches='tight')
+                                 col_leg2.download_button(
+                label="📐 Légende SVG",
+                data=buf_leg_svg.getvalue(),
+                file_name=f"{scenario_name}_legend_horizontal.svg",
+                mime="image/svg+xml",
+                key=f"legend_horizontal_svg_{scenario_name}"
+            )
+
+                               st.markdown("---")
+
+                          # 4) Category-by-Category Charts
+                          if generate_category_details and percentage_table is not None and total_impact_table is not None:
+                                  st.markdown("---")
+                                  st.header("Detailed Analysis by Impact Category")
+                                  category_figures = plot_stacked_bar_by_category(initial_table, total_impact_table)
+                                  if category_figures:
+                                      for main_fig, legend_fig, category_name in category_figures:
+                                          st.subheader(f"Category: {category_name}")
+
+                                          col1, col2 = st.columns([4, 1])
+                                          with col1:
+                                              st.pyplot(main_fig)
+
+                                              col_dl1, col_dl2 = st.columns(2)
+
+                                              buf_main_png = io.BytesIO()
+                                              main_fig.savefig(buf_main_png, format="png", dpi=600, bbox_inches='tight')
+                                              col_dl1.download_button(
+                    label="📥 Courbe PNG (600 DPI)",
+                    data=buf_main_png.getvalue(),
+                    file_name=f"{category_name}_stacked.png",
+                    mime="image/png",
+                    key=f"stacked_png_{category_name}"
+                )
+
+                                              buf_main_svg = io.BytesIO()
+                                              main_fig.savefig(buf_main_svg, format="svg", bbox_inches='tight')
+                                              col_dl2.download_button(
+                    label="📐 Courbe SVG",
+                    data=buf_main_svg.getvalue(),
+                    file_name=f"{category_name}_stacked.svg",
+                    mime="image/svg+xml",
+                    key=f"stacked_svg_{category_name}"
+                )
+
+                                          with col2:
+                                               st.pyplot(legend_fig)
+
+                                               col_leg1, col_leg2 = st.columns(2)
+
+                                               buf_leg_png = io.BytesIO()
+                                               legend_fig.savefig(buf_leg_png, format="png", dpi=600, bbox_inches='tight')
+                                               col_leg1.download_button(
+                    label="📥 Légende PNG (600 DPI)",
+                    data=buf_leg_png.getvalue(),
+                    file_name=f"{category_name}_legend_stacked.png",
+                    mime="image/png",
+                    key=f"legend_stacked_png_{category_name}"
+                )
+
+                                               buf_leg_svg = io.BytesIO()
+                                               legend_fig.savefig(buf_leg_svg, format="svg", bbox_inches='tight')
+                                               col_leg2.download_button(
+                    label="📐 Légende SVG",
+                    data=buf_leg_svg.getvalue(),
+                    file_name=f"{category_name}_legend_stacked.svg",
+                    mime="image/svg+xml",
+                    key=f"legend_stacked_svg_{category_name}"
+                )
+
+                                          st.markdown("---")
+
+                          # 5) Combined Charts
+                          if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
+                              st.markdown("---")
+                              st.header("Combined View of All Scenarios")
+                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table)
+                              if combined_figures:
+                                   for name, fig in combined_figures:
+                                        st.subheader(name)
+                                        st.pyplot(fig)
+
+                                        col1, col2 = st.columns(2)
+
+                                        buf_png = io.BytesIO()
+                                        fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                                        col1.download_button(
+                label="📥 PNG (600 DPI)",
+                data=buf_png.getvalue(),
+                file_name=f"{name.replace(' ', '_').lower()}.png",
+                mime="image/png",
+                key=f"combined_png_{name}"
+            )
+
+                                        buf_svg = io.BytesIO()
+                                        fig.savefig(buf_svg, format="svg", bbox_inches='tight')
+                                        col2.download_button(
+                label="📐 SVG",
+                data=buf_svg.getvalue(),
+                file_name=f"{name.replace(' ', '_').lower()}.svg",
+                mime="image/svg+xml",
+                key=f"combined_svg_{name}"
+            )
+
+                                        st.markdown("---")
+
 
         except Exception as e:
             st.error(f"Error while processing the file: {str(e)}")
