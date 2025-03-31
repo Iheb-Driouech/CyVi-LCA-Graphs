@@ -253,7 +253,7 @@ def plot_comparison_bar_chart(total_impact_table):
             bars.append(bar[0])
             labels.append(scenario)
 
-        ax1.set_title("Comparison of Scenarios", fontsize=title_size, fontweight=fontweight,
+        ax1.set_title("Comparison of Scenarios", fontsize=title_size,title_fontsize=legend_size, fontweight=fontweight,
                       fontstyle=fontstyle, family=fontfamily, pad=30)
         ax1.set_ylabel("(%)", fontsize=label_size, fontweight=fontweight,
                        fontstyle=fontstyle, family=fontfamily)
@@ -471,7 +471,7 @@ def plot_relative_contribution_by_scenario(scenario_tables):
             plt.tight_layout()
 
             legend_ax.axis("off")
-            legend_ax.legend(bars, labels, title="Contributions", fontsize=legend_size, loc="center")
+            legend_ax.legend(bars, labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, loc="center")
             plt.tight_layout()
 
             figures.append((main_fig, legend_fig))
@@ -628,7 +628,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
 
             legend_ax.axis("off")
             legend_ax.legend(bars, labels, title="Contributions",
-                             fontsize=legend_size, loc="center")
+                             fontsize=legend_size,title_fontsize=legend_size,  loc="center")
             plt.tight_layout()
 
             figures.append((main_fig, legend_fig))
@@ -798,7 +798,7 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
 
             legend_ax.axis("off")
             legend_ax.legend(bars, labels, title="Contributions",
-                             fontsize=legend_size, loc="center")
+                             fontsize=legend_size, title_fontsize=legend_size, loc="center")
             plt.tight_layout()
 
             figures.append((main_fig, legend_fig, category))
@@ -998,7 +998,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
             list(contrib_color_map.keys()) + [s.split("(")[-1].replace(")", "").strip() for s in scenarios],
             title="Legend - Contributions & Scenarios",
             ncol=2,
-            fontsize=legend_size,
+            fontsize=legend_size,title_fontsize=legend_size, 
             loc='center'
         )
         figures.append(("Combined Legend", legend_fig))
