@@ -894,7 +894,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
         # Fonction interne pour créer un graphique
         def create_figure(show_totals=False):
-            fig, ax = plt.subplots(figsize=(16, 10), dpi=300)
+            fig, ax = plt.subplots(figsize=(16, 10), dpi=600)
             title = "Combined Scenarios Analysis"
             title += " (with Totals)" if show_totals else ""
             ax.set_title(title, fontsize=title_size, pad=80,
@@ -980,7 +980,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
 
         # Légende pour les contributions
-        legend_fig1, ax1 = plt.subplots(figsize=(6, 2), dpi=300)
+        legend_fig1, ax1 = plt.subplots(figsize=(6, 2), dpi=600)
         ax1.axis('off')
 
         contrib_handles = [
@@ -1004,7 +1004,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
 
         # Légende pour les scénarios
-        legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=300)
+        legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=600)
         ax2.axis('off')
 
         scenario_handles = [
