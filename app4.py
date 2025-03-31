@@ -1160,7 +1160,7 @@ def main():
     🔎 **Note**: The Excel file already contains examples data to help you visualize the kind of charts that will be generated.
     """)
 
-    with open("assets/template_LCA.xlsx", "rb") as f:
+    with open("assets/LCA_template.xlsx", "rb") as f:
         excel_bytes = f.read()
 
     st.download_button(
