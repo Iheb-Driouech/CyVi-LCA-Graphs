@@ -4,10 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-import matplotlib.font_manager as fm
-from matplotlib.patches import Rectangle
-import math
-
+import io
 
 
 
@@ -1263,9 +1260,35 @@ def main():
                     st.header("Scenario Comparison")
                     comparison_figures = plot_comparison_bar_chart(total_impact_table)
                     if comparison_figures:
-                        st.pyplot(comparison_figures[0])  # Main comparison
-                        st.pyplot(comparison_figures[1])  # Legend
-                        st.pyplot(comparison_figures[2])  # With totals
+                         titles = ["Main Scenario Comparison", "Legend", "Scenario Comparison (with Totals)"]
+
+                         for i, fig in enumerate(comparison_figures):
+                              st.subheader(titles[i])
+                              st.pyplot(fig)
+
+                              col1, col2 = st.columns(2)
+
+                              # 🔹 PNG export (600 DPI)
+                              buf_png = io.BytesIO()
+                              fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
+                              col1.download_button(
+            label="📥 Télécharger PNG (600 DPI)",
+            data=buf_png.getvalue(),
+            file_name=f"{titles[i].replace(' ', '_').lower()}.png",
+            mime="image/png",
+            key=f"png_button_{i}"
+        )
+
+        # 🔹 SVG export
+                              buf_svg = io.BytesIO()
+                              fig.savefig(buf_svg, format="svg", bbox_inches='tight')
+                              col2.download_button(
+            label="📐 Télécharger SVG (vectoriel)",
+            data=buf_svg.getvalue(),
+            file_name=f"{titles[i].replace(' ', '_').lower()}.svg",
+            mime="image/svg+xml",
+            key=f"svg_button_{i}"
+        )
 
                 # 2) Detailed Scenario Charts (vertical)
                 if generate_scenario_details and scenario_tables:
