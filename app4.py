@@ -694,7 +694,7 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
         for category in categories:
             category_data = initial_table.loc[category]
             x_positions = np.arange(len(scenarios))
-            bar_width = 0.9  # réduit l'espace entre les barres
+            bar_width = 0.5  # réduit l'espace entre les barres
 
             main_fig, main_ax = plt.subplots(figsize=(12, 7))
             legend_fig, legend_ax = plt.subplots(figsize=(5, 3))
@@ -784,6 +784,7 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
                 fontstyle=fontstyle,
                 family=fontfamily
             )
+
             main_ax.set_xlim(x_positions[0] - (bar_width / 2), x_positions[-1] + (bar_width / 2))
             main_ax.grid(axis="y", linestyle="--", alpha=0.7)
             plt.tight_layout()
