@@ -1272,7 +1272,7 @@ def main():
                                             buf_png = io.BytesIO()
                                             fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
                                             col1.download_button(
-                label="📥 Télécharger PNG (600 DPI)",
+                label="📥 Télécharger PNG (300 DPI)",
                 data=buf_png.getvalue(),
                 file_name=f"{titles[i].replace(' ', '_').lower()}.png",
                 mime="image/png",
@@ -1309,7 +1309,7 @@ def main():
                                            buf_main_png = io.BytesIO()
                                            main_fig.savefig(buf_main_png, format="png", dpi=300, bbox_inches='tight')
                                            col_dl1.download_button(
-                                                   label="📥 Courbe PNG (600 DPI)",
+                                                   label="📥 Courbe PNG (300 DPI)",
                                                    data=buf_main_png.getvalue(),
                                                    file_name=f"{scenario_name}_vertical.png",
                                                    mime="image/png",
@@ -1334,7 +1334,7 @@ def main():
                                    buf_leg_png = io.BytesIO()
                                    legend_fig.savefig(buf_leg_png, format="png", dpi=300, bbox_inches='tight')
                                    col_leg1.download_button(
-                label="📥 Légende PNG (600 DPI)",
+                label="📥 Légende PNG (300 DPI)",
                 data=buf_leg_png.getvalue(),
                 file_name=f"{scenario_name}_legend_vertical.png",
                 mime="image/png",
@@ -1372,7 +1372,7 @@ def main():
                                          buf_main_png = io.BytesIO()
                                          main_fig.savefig(buf_main_png, format="png", dpi=300, bbox_inches='tight')
                                          col_dl1.download_button(
-                label="📥 Courbe PNG (600 DPI)",
+                label="📥 Courbe PNG (300 DPI)",
                 data=buf_main_png.getvalue(),
                 file_name=f"{scenario_name}_horizontal.png",
                 mime="image/png",
@@ -1397,7 +1397,7 @@ def main():
                                  buf_leg_png = io.BytesIO()
                                  legend_fig.savefig(buf_leg_png, format="png", dpi=300, bbox_inches='tight')
                                  col_leg1.download_button(
-                label="📥 Légende PNG (600 DPI)",
+                label="📥 Légende PNG (300 DPI)",
                 data=buf_leg_png.getvalue(),
                 file_name=f"{scenario_name}_legend_horizontal.png",
                 mime="image/png",
@@ -1443,25 +1443,25 @@ def main():
                               combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table)
                           
                               if combined_figures:
-                                  # 🔹 Extraire les légendes pour traitement séparé
-                                  legends = {"Contributions Legend": None, "Scenarios Legend": None}
-                                  figures = []
+                                  # Séparer légendes et courbes
+                                  legends = {}
+                                  charts = []
                           
                                   for name, fig in combined_figures:
-                                      if name in legends:
+                                      if "Legend" in name:
                                           legends[name] = fig
                                       else:
-                                          figures.append((name, fig))
-
-                                  # 📌 Afficher et télécharger les légendes en premier
-                                  for legend_name, fig in legends.items():
+                                          charts.append((name, fig))
+                          
+                                  # 📌 Afficher d’abord les légendes avec téléchargement
+                                  for legend_name, legend_fig in legends.items():
                                       st.subheader(legend_name)
-                                      st.pyplot(fig)
+                                      st.pyplot(legend_fig)
                           
                                       col1, col2 = st.columns(2)
                           
                                       buf_png = io.BytesIO()
-                                      fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
+                                      legend_fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
                                       col1.download_button(
                                           label="📥 Légende PNG (600 DPI)",
                                           data=buf_png.getvalue(),
@@ -1469,9 +1469,9 @@ def main():
                                           mime="image/png",
                                           key=f"legend_png_{legend_name}"
                                       )
-                          
+
                                       buf_svg = io.BytesIO()
-                                      fig.savefig(buf_svg, format="svg", bbox_inches='tight')
+                                      legend_fig.savefig(buf_svg, format="svg", bbox_inches='tight')
                                       col2.download_button(
                                           label="📐 Légende SVG",
                                           data=buf_svg.getvalue(),
@@ -1482,15 +1482,15 @@ def main():
                           
                                       st.markdown("---")
                           
-                                  # 🔹 Afficher les figures principales avec téléchargement
-                                  for name, fig in figures:
+                                  # 🖼️ Puis afficher chaque graphique principal avec téléchargement
+                                  for name, fig in charts:
                                       st.subheader(name)
                                       st.pyplot(fig)
                           
                                       col1, col2 = st.columns(2)
                           
                                       buf_png = io.BytesIO()
-                                      fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
+                                      fig.savefig(buf_png, format="png", dpi=600, bbox_inches='tight')
                                       col1.download_button(
                                           label="📥 PNG (600 DPI)",
                                           data=buf_png.getvalue(),
@@ -1510,6 +1510,7 @@ def main():
                                       )
                           
                                       st.markdown("---")
+
 
 
 
