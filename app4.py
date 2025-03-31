@@ -638,10 +638,10 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
 
 
 
-def plot_stacked_bar_by_category(percentage_table, total_impact_table):
+def plot_stacked_bar_by_category(initial_table, total_impact_table):
     """
     Génère (main_figure, legend_figure, category_name) pour chaque catégorie d’impact.
-    Adapté pour affichage dans Streamlit via st.pyplot().
+    Utilise les valeurs réelles (initial_table). Adapté pour affichage dans Streamlit via st.pyplot().
     """
     try:
         global contributions_colors, font_styles
@@ -657,14 +657,14 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
 
         figures = []
 
-        if percentage_table.empty or total_impact_table.empty:
+        if initial_table.empty or total_impact_table.empty:
             st.warning("⚠ Données vides pour les graphiques par catégorie.")
             return []
 
         # 🔹 Obtenir les scénarios et contributions
-        scenarios = percentage_table.columns.get_level_values(0).unique()
-        contributions = percentage_table.columns.get_level_values(1).unique()
-        categories = percentage_table.index
+        scenarios = initial_table.columns.get_level_values(0).unique()
+        contributions = initial_table.columns.get_level_values(1).unique()
+        categories = initial_table.index
 
         # 🔹 Nettoyage des noms de scénarios
         scenario_labels = {scenario: scenario.split("(")[-1].replace(")", "").strip().lower() for scenario in scenarios}
@@ -692,9 +692,9 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
 
         # 🔹 Générer les graphiques pour chaque catégorie
         for category in categories:
-            category_data = percentage_table.loc[category]
+            category_data = initial_table.loc[category]
             x_positions = np.arange(len(scenarios))
-            bar_width = max(0.2, min(0.8, 1.5 / len(scenarios)))
+            bar_width = 0.9  # réduit l'espace entre les barres
 
             main_fig, main_ax = plt.subplots(figsize=(12, 7))
             legend_fig, legend_ax = plt.subplots(figsize=(5, 3))
@@ -708,9 +708,10 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
                 values = []
                 for s in scenarios:
                     try:
-                        values.append(category_data[s, contribution])
+                        val = category_data[s, contribution]
                     except KeyError:
-                        values.append(0)
+                        val = 0
+                    values.append(val)
                 values = np.array(values, dtype=float)
 
                 pos_values = np.where(values > 0, values, 0)
@@ -738,7 +739,16 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
                     )
                     bottom_neg += neg_values
 
-            # Ajouter les totaux
+            # ✅ Calcul de l'échelle optimisée après empilement
+            all_stacked_values = list(bottom_pos) + list(bottom_neg)
+            min_val = min(all_stacked_values + [0])
+            max_val = max(all_stacked_values + [0])
+            y_margin = 0.05 * (max_val - min_val) if max_val != min_val else 1
+            ylim_min = min_val - y_margin
+            ylim_max = max_val + y_margin
+            main_ax.set_ylim(ylim_min, ylim_max)
+
+            # 🔹 Ajouter les totaux
             for i, scenario in enumerate(scenarios):
                 scen_clean = scenario_labels[scenario]
                 if scen_clean in total_impact_labels:
@@ -747,7 +757,7 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
                         formatted = f"{total_value:.2f}" if 0.01 <= abs(total_value) <= 1000 else f"{total_value:.2E}"
                         main_ax.text(
                             x_positions[i],
-                            max(bottom_pos[i], 0) + 5,
+                            max(bottom_pos[i], 0) + y_margin * 0.3,
                             formatted,
                             ha='center',
                             va='bottom',
@@ -760,7 +770,7 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
                     except KeyError:
                         continue
 
-            # Mise en forme
+            # 🔹 Mise en forme
             main_ax.set_title(
                 f"Contribution Analysis - Category: {category}",
                 fontsize=title_size,
@@ -769,7 +779,7 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
                 fontstyle=fontstyle,
                 family=fontfamily
             )
-            main_ax.set_ylabel("(%)", fontsize=label_size,
+            main_ax.set_ylabel("Valeur réelle", fontsize=label_size,
                                fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             main_ax.set_xticks(x_positions)
             main_ax.set_xticklabels(
@@ -782,7 +792,6 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
                 family=fontfamily
             )
             main_ax.set_xlim(x_positions[0] - (bar_width / 2), x_positions[-1] + (bar_width / 2))
-            main_ax.set_ylim(min(bottom_neg) - 5, max(bottom_pos))
             main_ax.grid(axis="y", linestyle="--", alpha=0.7)
             plt.tight_layout()
 
@@ -798,6 +807,7 @@ def plot_stacked_bar_by_category(percentage_table, total_impact_table):
     except Exception as e:
         st.error(f"❌ Error generating graph per category : {str(e)}")
         return []
+
 
 
 
