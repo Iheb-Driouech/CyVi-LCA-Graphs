@@ -1010,7 +1010,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         scenario_handles = [
         plt.Rectangle((0, 0), 1, 1,
                   facecolor=scenario_color_map[scenario],
-                  hatch=scenario_hatch_dict.get(scenario, None)
+                  hatch=None if scenario_hatch_dict[scenario] in [None, "None"] else scenario_hatch_dict[scenario]
 ,
                   edgecolor='black')
         for scenario in scenarios
