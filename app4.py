@@ -1219,6 +1219,7 @@ def main():
                  hatch_options = ["//", "oo", "xx", "--", "||", "++", "..", "None"]
                  return {name.lower(): hatch_options[i % len(hatch_options)] for i, name in enumerate(scenario_names)}
              default_scenario_hatches = generate_default_hatches(scenario_names_cleaned)
+             scenario_hatches = default_scenario_hatches.copy()
 
             # Dictionnaires globaux modifiables
              global scenario_colors, contributions_colors, font_styles, scenario_hatches
