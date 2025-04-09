@@ -1123,6 +1123,7 @@ def find_file_path(file_name, start_directory=None):
 ###############################
 
 def main():
+    global scenario_colors, contributions_colors, font_styles, scenario_hatches
     st.markdown(
     """
     <h1 style='text-align: center; font-size: 3em;'>
@@ -1222,7 +1223,7 @@ def main():
              scenario_hatches = default_scenario_hatches.copy()
 
             # Dictionnaires globaux modifiables
-             global scenario_colors, contributions_colors, font_styles, scenario_hatches
+             
              scenario_hatches = default_scenario_hatches.copy()
 
              scenario_colors = default_scenario_colors.copy()
