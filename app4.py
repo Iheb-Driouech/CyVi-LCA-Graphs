@@ -1251,7 +1251,7 @@ def main():
 
              if customize_hatches:
                  st.sidebar.markdown("#### Scenario hatches")
-                 hatch_choices = ["///","//","/",  "xx","XX", "++", "..","OO","oo", "None"]
+                 hatch_choices = ["///","//","/",  "xx","XX", "++", "..","O","oo", "None"]
 
                  for scen in scenario_names_cleaned:
                      scen_lower = scen.lower()
