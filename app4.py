@@ -849,7 +849,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         # Définir les hachures par scénario
         scenario_hatch_dict = {}
         for scenario in scenarios:
-              key = scenario.strip().lower()
+              key = scenario.split("(")[-1].replace(")", "").strip().lower()
               scenario_hatch_dict[scenario] = scenario_hatches.get(key, None)
 
 
