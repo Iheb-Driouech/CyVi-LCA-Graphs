@@ -847,11 +847,11 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         x_positions = np.arange(len(categories))
 
         # Définir les hachures par scénario
-        hatches_list = ["//", "oo",  "xx", "--", "||", "++", "..",]
-        scenario_hatch_dict = {
-            scenario: hatches_list[i % len(hatches_list)]
-            for i, scenario in enumerate(scenarios)
-        }
+        scenario_hatch_dict = {}
+        for scenario in scenarios:
+              key = scenario.strip().lower()
+              scenario_hatch_dict[scenario] = scenario_hatches.get(key, None)
+
 
         # Gérer les couleurs des contributions
         cmap = plt.get_cmap("tab10")
@@ -923,7 +923,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                             bar_width,
                             bottom=bottom_pos,
                             color=contrib_color_map[contrib],
-                            hatch=scenario_hatch_dict[scenario],
+                            hatch=scenario_hatch_dict.get(scenario, None)
+,
                             edgecolor='black'
                         )
                         bottom_pos += pos_values
@@ -935,7 +936,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                             bar_width,
                             bottom=bottom_neg,
                             color=contrib_color_map[contrib],
-                            hatch=scenario_hatch_dict[scenario],
+                            hatch=scenario_hatch_dict.get(scenario, None)
+,
                             edgecolor='black'
                         )
                         bottom_neg += neg_values
@@ -1008,7 +1010,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         scenario_handles = [
         plt.Rectangle((0, 0), 1, 1,
                   facecolor=scenario_color_map[scenario],
-                  hatch=scenario_hatch_dict[scenario],
+                  hatch=scenario_hatch_dict.get(scenario, None)
+,
                   edgecolor='black')
         for scenario in scenarios
 ]
@@ -1123,7 +1126,7 @@ def main():
     st.markdown(
     """
     <h1 style='text-align: center; font-size: 3em;'>
-        LCA Graph Dashboard
+        LCA Graph Dashboard 🌍
     </h1>
     <p style='text-align: center; font-size: 1.1em;'>
         
@@ -1212,9 +1215,15 @@ def main():
              
              default_scenario_colors = generate_default_colors(scenario_names_cleaned, list(mcolors.TABLEAU_COLORS.values()))
              default_contribution_colors = generate_default_colors(contributions_list, basic_contribution_palette)
+             def generate_default_hatches(scenario_names):
+                 hatch_options = ["//", "oo", "xx", "--", "||", "++", "..", "None"]
+                 return {name.lower(): hatch_options[i % len(hatch_options)] for i, name in enumerate(scenario_names)}
+             default_scenario_hatches = generate_default_hatches(scenario_names_cleaned)
 
             # Dictionnaires globaux modifiables
-             global scenario_colors, contributions_colors, font_styles
+             global scenario_colors, contributions_colors, font_styles, scenario_hatches
+             scenario_hatches = default_scenario_hatches.copy()
+
              scenario_colors = default_scenario_colors.copy()
              contributions_colors = default_contribution_colors.copy()
              font_styles = get_font_styles()
@@ -1235,7 +1244,24 @@ def main():
                     contrib_lower = contrib.lower()
                     picked = st.sidebar.color_picker(f"📦 {contrib}", contributions_colors[contrib_lower])
                     contributions_colors[contrib_lower] = picked
-             
+             st.sidebar.subheader("🔳 Hatch customization")
+             customize_hatches = st.sidebar.checkbox("Would you like to customize the hatches?")
+
+             if customize_hatches:
+                 st.sidebar.markdown("#### Scenario hatches")
+                 hatch_choices = ["//", "oo", "xx", "--", "||", "++", "..", "None"]
+
+                 for scen in scenario_names_cleaned:
+                     scen_lower = scen.lower()
+                     current_hatch = scenario_hatches.get(scen_lower, "None")
+                     selected_hatch = st.sidebar.selectbox(
+            f"Hatch for {scen.capitalize()}",
+            hatch_choices,
+            index=hatch_choices.index(current_hatch) if current_hatch in hatch_choices else 0,
+            key=f"hatch_selector_{scen_lower}"
+        )
+                     scenario_hatches[scen_lower] = None if selected_hatch == "None" else selected_hatch
+
              if initial_table is not None:
                           scenario_tables = generate_tables_by_scenario(initial_table, scenario_names_cleaned)
                           percentage_table = generate_percentage_table(initial_table, total_impact_table)
