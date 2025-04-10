@@ -477,9 +477,7 @@ def plot_relative_contribution_by_scenario(scenario_tables):
             plt.tight_layout()
 
             figures.append((main_fig, legend_fig))
-            plt.close(main_fig)
-            plt.close(legend_fig)
-
+           
         return figures
 
     except Exception as e:
@@ -1452,8 +1450,7 @@ def main():
                                                       with col2:
                                                           st.pyplot(legend_fig)
                           
-                                                      plt.close(main_fig)
-                                                      plt.close(legend_fig)
+                                                      
 
                                                       st.markdown("---")
 
