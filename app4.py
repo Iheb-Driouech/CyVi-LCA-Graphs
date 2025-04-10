@@ -473,10 +473,14 @@ def plot_relative_contribution_by_scenario(scenario_tables):
             plt.tight_layout()
 
             legend_ax.axis("off")
-            # Créer une légende propre à chaque scénario
-            handles = [plt.Rectangle((0, 0), 1, 1, color=contribution_colors[contrib]) for contrib in labels]
-            legend_ax.legend(handles, labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, loc="center")
-
+            legend_ax.legend(
+    handles=[plt.Rectangle((0, 0), 1, 1, color=contribution_colors[c]) for c in labels],
+    labels=labels,
+    title="Contributions",
+    fontsize=legend_size,
+    title_fontsize=legend_size,
+    loc="center"
+)
 
             plt.tight_layout()
 
@@ -633,12 +637,8 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
             plt.tight_layout()
 
             legend_ax.axis("off")
-            
-            handles = [plt.Rectangle((0, 0), 1, 1, color=contribution_color_map[contrib]) for contrib in labels]
-            
-            legend_ax.legend(handles, labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, loc="center")
-
-
+            legend_ax.legend(bars, labels, title="Contributions",
+                             fontsize=legend_size,title_fontsize=legend_size,  loc="center")
             plt.tight_layout()
 
             figures.append((main_fig, legend_fig))
@@ -1200,16 +1200,8 @@ def main():
 
             # Affichage aperçu rapide (5 premières lignes)
             preview_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, nrows=5)
-
-            # 🛠 Fix Arrow type issue ONLY for display
-            preview_df_display = preview_df.copy()
-            for col in preview_df_display.columns:
-                 if preview_df_display[col].dtype == "object":
-                      preview_df_display[col] = preview_df_display[col].astype(str)
-
             with st.expander("👁️ Preview of the selected sheet"):
-                 st.dataframe(preview_df_display)
-
+                st.dataframe(preview_df)
             
             # Analyze the Excel file from a specified sheet (e.g., "Feuil2")
             initial_table, combined_table, total_impact_table, scenario_names_cleaned = analyze_excel_and_generate_tables(
