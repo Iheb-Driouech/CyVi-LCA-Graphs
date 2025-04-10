@@ -403,14 +403,7 @@ def plot_relative_contribution_by_scenario(scenario_tables):
             bar_width = 0.6
             bars = []
             labels = []
-            # On construit la légende complète au début de la boucle
-            if len(figures) == 0:
-                for contribution in sorted(all_contributions):
-                    color = contribution_colors.get(contribution, "#000000")
-                    patch = plt.Rectangle((0, 0), 1, 1, facecolor=color, edgecolor='black')
-                    bars.append(patch)
-                    labels.append(contribution.replace("%", ""))   
-                    
+            
             bottom_pos = np.zeros(len(categories))
             bottom_neg = np.zeros(len(categories))
 
@@ -563,13 +556,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
             bar_height = 0.6
             bars = []
             labels = []
-            # On construit la légende complète au début de la boucle
-            if len(figures) == 0:
-                for contribution in sorted(all_contributions):
-                    color = contribution_color_map.get(contribution, "#000000")
-                    patch = plt.Rectangle((0, 0), 1, 1, facecolor=color, edgecolor='black')
-                    bars.append(patch)
-                    labels.append(contribution.replace("%", ""))   
+            
             left_pos = np.zeros(len(categories))
             left_neg = np.zeros(len(categories))
 
