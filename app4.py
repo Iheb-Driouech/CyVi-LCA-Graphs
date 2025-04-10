@@ -473,14 +473,10 @@ def plot_relative_contribution_by_scenario(scenario_tables):
             plt.tight_layout()
 
             legend_ax.axis("off")
-            legend_ax.legend(
-    handles=[plt.Rectangle((0, 0), 1, 1, color=contribution_colors[c]) for c in labels],
-    labels=labels,
-    title="Contributions",
-    fontsize=legend_size,
-    title_fontsize=legend_size,
-    loc="center"
-)
+            # Créer une légende propre à chaque scénario
+            handles = [plt.Rectangle((0, 0), 1, 1, color=contribution_colors[contrib]) for contrib in labels]
+            legend_ax.legend(handles, labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, loc="center")
+
 
             plt.tight_layout()
 
@@ -637,14 +633,11 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
             plt.tight_layout()
 
             legend_ax.axis("off")
-            legend_ax.legend(
-    handles=[plt.Rectangle((0, 0), 1, 1, color=contribution_color_map[c]) for c in labels],
-    labels=labels,
-    title="Contributions",
-    fontsize=legend_size,
-    title_fontsize=legend_size,
-    loc="center"
-)
+            
+            handles = [plt.Rectangle((0, 0), 1, 1, color=contribution_color_map[contrib]) for contrib in labels]
+            
+            legend_ax.legend(handles, labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, loc="center")
+
 
             plt.tight_layout()
 
