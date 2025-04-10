@@ -119,8 +119,8 @@ def extract_contributions_from_initial_table(initial_table):
     
 def generate_percentage_table(initial_table, total_impact_table):
     """
-    Generates a DataFrame identical to `initial_table`, but converts its values to percentages
-    relative to the maximum impact found in `total_impact_table` for each category.
+    Generates a DataFrame identical to initial_table, but converts its values to percentages
+    relative to the maximum impact found in total_impact_table for each category.
     """
     try:
         percentage_table = initial_table.copy()
@@ -473,15 +473,7 @@ def plot_relative_contribution_by_scenario(scenario_tables):
             plt.tight_layout()
 
             legend_ax.axis("off")
-            legend_ax.legend(
-    handles=[plt.Rectangle((0, 0), 1, 1, color=contribution_colors[c]) for c in labels],
-    labels=labels,
-    title="Contributions",
-    fontsize=legend_size,
-    title_fontsize=legend_size,
-    loc="center"
-)
-
+            legend_ax.legend(bars, labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, loc="center")
             plt.tight_layout()
 
             figures.append((main_fig, legend_fig))
