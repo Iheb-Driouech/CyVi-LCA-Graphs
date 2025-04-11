@@ -477,8 +477,7 @@ def plot_relative_contribution_by_scenario(scenario_tables):
             plt.tight_layout()
 
             figures.append((main_fig, legend_fig))
-            plt.close(main_fig)
-            plt.close(legend_fig)
+            
 
         return figures
 
@@ -634,8 +633,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
             plt.tight_layout()
 
             figures.append((main_fig, legend_fig))
-            plt.close(main_fig)
-            plt.close(legend_fig)
+           
 
         return figures
 
@@ -1319,9 +1317,9 @@ def main():
                                for idx, (main_fig, legend_fig) in enumerate(scenario_figures):
                                       scenario_name = list(scenario_tables.keys())[idx]
                                       st.subheader(f"Scenario: {scenario_name}")
-
-                                      col1, col2 = st.columns([4, 1])
-                                      with col1:
+                                                                                                    
+                                      col_main, col_legend = st.columns([3, 1])
+                                      with col_main:
                                            st.pyplot(main_fig)
 
                                            col_dl1, col_dl2 = st.columns(2)
@@ -1347,7 +1345,7 @@ def main():
                 key=f"vertical_svg_{scenario_name}"
             )
 
-                               with col2:
+                               with col_legend:
                                    st.pyplot(legend_fig)
 
                                    col_leg1, col_leg2 = st.columns(2)
