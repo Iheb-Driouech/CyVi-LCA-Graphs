@@ -1317,9 +1317,11 @@ def main():
                                for idx, (main_fig, legend_fig) in enumerate(scenario_figures):
                                       scenario_name = list(scenario_tables.keys())[idx]
                                       st.subheader(f"Scenario: {scenario_name}")
-                                                                                                    
-                                      col_main, col_legend = st.columns([3, 1])
-                                      with col_main:
+                                      
+                                      with st.container():
+                                                              
+                                        col_main, col_legend = st.columns([3, 1])
+                                        with col_main:
                                            st.pyplot(main_fig)
 
                                            col_dl1, col_dl2 = st.columns(2)
@@ -1345,14 +1347,14 @@ def main():
                 key=f"vertical_svg_{scenario_name}"
             )
 
-                               with col_legend:
-                                   st.pyplot(legend_fig)
+                                        with col_legend:
+                                          st.pyplot(legend_fig)
 
-                                   col_leg1, col_leg2 = st.columns(2)
+                                          col_leg1, col_leg2 = st.columns(2)
 
-                                   buf_leg_png = io.BytesIO()
-                                   legend_fig.savefig(buf_leg_png, format="png", dpi=300, bbox_inches='tight')
-                                   col_leg1.download_button(
+                                          buf_leg_png = io.BytesIO()
+                                          legend_fig.savefig(buf_leg_png, format="png", dpi=300, bbox_inches='tight')
+                                          col_leg1.download_button(
                 label="📥 Légende PNG (300 DPI)",
                 data=buf_leg_png.getvalue(),
                 file_name=f"{scenario_name}_legend_vertical.png",
@@ -1360,9 +1362,9 @@ def main():
                 key=f"legend_vertical_png_{scenario_name}"
             )
 
-                                   buf_leg_svg = io.BytesIO()
-                                   legend_fig.savefig(buf_leg_svg, format="svg", bbox_inches='tight')
-                                   col_leg2.download_button(
+                                        buf_leg_svg = io.BytesIO()
+                                        legend_fig.savefig(buf_leg_svg, format="svg", bbox_inches='tight')
+                                        col_leg2.download_button(
                 label="📐 Légende SVG",
                 data=buf_leg_svg.getvalue(),
                 file_name=f"{scenario_name}_legend_vertical.svg",
