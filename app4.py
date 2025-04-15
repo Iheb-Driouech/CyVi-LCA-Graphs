@@ -842,7 +842,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         contributions = percentage_table.columns.levels[1]
         num_scenarios = len(scenarios)
         bar_width = 0.9 / num_scenarios
-        x_positions = np.arange(len(categories))*1.5
+        x_positions = np.arange(len(categories))*2
 
         # Définir les hachures par scénario
         scenario_hatch_dict = {}
