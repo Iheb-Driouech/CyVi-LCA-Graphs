@@ -1036,6 +1036,115 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
     except Exception as e:
         st.error(f"Error generating combined scenario chart: {str(e)}")
         return []
+def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order):
+    """
+    Génère des graphiques horizontaux combinés par scénario avec hachures et légendes.
+    Retourne une liste de tuples : (description, figure).
+    """
+    try:
+        global contributions_colors, scenario_colors, font_styles, scenario_hatches
+        figures = []
+
+        fontfamily = font_styles["family"]
+        fontweight = font_styles["weight"]
+        fontstyle = font_styles["style"]
+        title_size = font_styles["title_size"]
+        label_size = font_styles["label_size"]
+        legend_size = font_styles["legend_size"]
+        text_size = font_styles["text_size"]
+
+        if percentage_table.empty or total_impact_table.empty:
+            st.warning("Missing data for the combined scenario chart.")
+            return []
+
+        categories = percentage_table.index
+        scenarios = percentage_table.columns.levels[0]
+        contributions = percentage_table.columns.levels[1]
+        num_scenarios = len(scenarios)
+        bar_height = 0.9 / num_scenarios
+        y_positions = np.arange(len(categories)) * 1.5
+
+        scenario_hatch_dict = {scenario: scenario_hatches.get(scenario.split("(")[-1].replace(")", "").strip().lower(), None) for scenario in scenarios}
+
+        # Couleurs contributions
+        cmap = plt.get_cmap("tab10")
+        contrib_color_map = {contrib: contributions_colors.get(contrib.replace("%", "").strip().lower(), cmap(i % 10)) for i, contrib in enumerate(contributions)}
+
+        # Couleurs scénarios
+        scenario_color_map = {scen: scenario_colors.get(scen.strip().lower(), "#FFFFFF") for scen in scenarios}
+
+        def create_figure(show_totals=False):
+            fig, ax = plt.subplots(figsize=(16, 10), dpi=300)
+            title = "Combined Scenarios Analysis (Horizontal)"
+            title += " (with Totals)" if show_totals else ""
+            ax.set_title(title, fontsize=title_size, pad=80, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
+            ax.tick_params(axis='x', labelsize=label_size)
+
+            for i, scenario in enumerate(scenarios):
+                left_pos = np.zeros(len(categories))
+                left_neg = np.zeros(len(categories))
+
+                for contrib in [c for c in contributions_order if c in contributions]:
+                    try:
+                        values = percentage_table.xs((scenario, contrib), axis=1, level=[0, 1]).values.flatten()
+                    except KeyError:
+                        continue
+                    values = np.nan_to_num(values.astype(float))
+                    pos_values = np.where(values > 0, values, 0)
+                    neg_values = np.where(values < 0, values, 0)
+
+                    if np.any(pos_values):
+                        ax.barh(y_positions + i * bar_height, pos_values, bar_height, left=left_pos, color=contrib_color_map[contrib], hatch=scenario_hatch_dict.get(scenario, None), edgecolor='black')
+                        left_pos += pos_values
+
+                    if np.any(neg_values):
+                        ax.barh(y_positions + i * bar_height, neg_values, bar_height, left=left_neg, color=contrib_color_map[contrib], hatch=scenario_hatch_dict.get(scenario, None), edgecolor='black')
+                        left_neg += neg_values
+
+                if show_totals:
+                    scenario_clean = scenario.split("(")[-1].replace(")", "").strip()
+                    try:
+                        totals = total_impact_table[scenario_clean].values
+                        for j, total in enumerate(totals):
+                            formatted = f"{total:.2E}" if abs(total) >= 1000 else f"{total:.2f}"
+                            ax.text(left_pos[j] + 2, y_positions[j] + i * bar_height, formatted, va='center', ha='left', fontsize=text_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
+                    except KeyError:
+                        pass
+
+            ax.set_yticks(y_positions + (num_scenarios - 1) * bar_height / 2)
+            ax.set_yticklabels(categories, fontsize=label_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
+            ax.set_xlabel("Contribution (%)", fontsize=label_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
+            ax.axvline(0, color='black', linestyle='--', alpha=0.5)
+            ax.set_xlim(left=min(left_neg) - 5, right=max(left_pos) + 5)
+            plt.tight_layout()
+            return fig
+
+        figures.append(("Main Chart (Horizontal)", create_figure(False)))
+        figures.append(("Chart with Totals (Horizontal)", create_figure(True)))
+
+        legend_fig1, ax1 = plt.subplots(figsize=(6, 2), dpi=300)
+        ax1.axis('off')
+        contrib_handles = [plt.Rectangle((0, 0), 1, 1, facecolor=color, edgecolor='black') for _, color in contrib_color_map.items()]
+        contrib_labels = list(contrib_color_map.keys())
+        legend1 = ax1.legend(contrib_handles, contrib_labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center')
+        legend1.get_frame().set_linewidth(0)
+        figures.append(("Contributions Legend (Horizontal)", legend_fig1))
+
+        legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=300)
+        ax2.axis('off')
+        scenario_handles = [plt.Rectangle((0, 0), 1, 1, facecolor=scenario_color_map[scenario], hatch=None if scenario_hatch_dict[scenario] in [None, "None"] else scenario_hatch_dict[scenario], edgecolor='black') for scenario in scenarios]
+        scenario_labels = [s.split("(")[-1].replace(")", "").strip() for s in scenarios]
+        legend2 = ax2.legend(scenario_handles, scenario_labels, title="Scenarios", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center')
+        legend2.get_frame().set_linewidth(0)
+        figures.append(("Scenarios Legend (Horizontal)", legend_fig2))
+
+        return figures
+
+    except Exception as e:
+        st.error(f"Error generating horizontal combined scenario chart: {str(e)}")
+        return []
+
+    
 
 
 
@@ -1287,6 +1396,8 @@ def main():
                           generate_scenario_details_horizontal = st.checkbox("Generate Detailed Scenario Charts (Horizontal)")
                           generate_category_details = st.checkbox("Generate Category-by-Category Charts")
                           generate_combined_charts = st.checkbox("Generate Combined Charts")
+                          generate_combined_charts_horizontal = st.checkbox("Generate Combined Charts (Horizontal)")
+
 
                 # 1) Scenario Comparison
                           if generate_scenario_comparison and total_impact_table is not None:
@@ -1552,10 +1663,67 @@ def main():
                                       )
                           
                                       st.markdown("---")
-
-
-
-
+                            # 6) Combined Charts - Horizontal
+                          if generate_combined_charts_horizontal and percentage_table is not None and total_impact_table is not None:
+                              st.markdown("---")
+                              st.header("Combined View of All Scenarios (Horizontal)")
+                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order)
+                              if combined_horizontal_figures:
+                                  legends_h = {}
+                                  charts_h = []
+                                  for name, fig in combined_horizontal_figures:
+                                      if "Legend" in name:
+                                          legends_h[name] = fig
+                                      else:
+                                          charts_h.append((name, fig))
+                                  for legend_name, legend_fig in legends_h.items():
+                                      st.subheader(legend_name)
+                                      st.pyplot(legend_fig)
+                                      col1, col2 = st.columns(2)
+                                      buf_png = io.BytesIO()
+                                      legend_fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
+                                      col1.download_button(
+                label="📥 Légende PNG (300 DPI)",
+                data=buf_png.getvalue(),
+                file_name=f"{legend_name.replace(' ', '_').lower()}.png",
+                mime="image/png",
+                key=f"legend_horizontal_png_{legend_name}"
+            )
+                                      buf_svg = io.BytesIO()
+                                      legend_fig.savefig(buf_svg, format="svg", bbox_inches='tight')
+                                      col2.download_button(
+                label="📐 Légende SVG",
+                data=buf_svg.getvalue(),
+                file_name=f"{legend_name.replace(' ', '_').lower()}.svg",
+                mime="image/svg+xml",
+                key=f"legend_horizontal_svg_{legend_name}"
+            )
+                                      st.markdown("---")
+                              for name, fig in charts_h:
+                                  st.subheader(name)
+                                  st.pyplot(fig)
+                                  col1, col2 = st.columns(2)
+                                  buf_png = io.BytesIO()
+                                  fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
+                                  col1.download_button(
+                label="📥 PNG (300 DPI)",
+                data=buf_png.getvalue(),
+                file_name=f"{name.replace(' ', '_').lower()}.png",
+                mime="image/png",
+                key=f"combined_horizontal_png_{name}"
+            )
+                                  buf_svg = io.BytesIO()
+                                  fig.savefig(buf_svg, format="svg", bbox_inches='tight')
+                                  col2.download_button(
+                label="📐 SVG",
+                data=buf_svg.getvalue(),
+                file_name=f"{name.replace(' ', '_').lower()}.svg",
+                mime="image/svg+xml",
+                key=f"combined_horizontal_svg_{name}"
+            )
+                                  st.markdown("---")
+                                  
+                                  
         except Exception as e:
             st.error(f"Error while processing the file: {str(e)}")
 
