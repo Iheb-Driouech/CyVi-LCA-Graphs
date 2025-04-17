@@ -1395,8 +1395,15 @@ def main():
                           generate_scenario_details = st.checkbox("Generate Detailed Scenario Charts (Vertical)")
                           generate_scenario_details_horizontal = st.checkbox("Generate Detailed Scenario Charts (Horizontal)")
                           generate_category_details = st.checkbox("Generate Category-by-Category Charts")
-                          generate_combined_charts = st.checkbox("Generate Combined Charts")
-                          generate_combined_charts_horizontal = st.checkbox("Generate Combined Charts (Horizontal)")
+                          combined_chart_mode = st.selectbox(
+    "📊 Combined View of All Scenarios",
+    ["Do not generate", "Vertical", "Horizontal"]
+)
+                          generate_combined_charts = combined_chart_mode == "Vertical"
+                          generate_combined_charts_horizontal = combined_chart_mode == "Horizontal"
+
+                          
+                          
 
 
                 # 1) Scenario Comparison
@@ -1663,7 +1670,7 @@ def main():
                                       )
                           
                                       st.markdown("---")
-                            # 6) Combined Charts - Horizontal
+                        # 6) Combined Charts - Horizontal
                           if generate_combined_charts_horizontal and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios (Horizontal)")
