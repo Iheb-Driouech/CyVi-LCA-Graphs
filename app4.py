@@ -337,7 +337,8 @@ def plot_comparison_bar_chart(total_impact_table):
 
 
 
-def plot_relative_contribution_by_scenario(scenario_tables):
+def plot_relative_contribution_by_scenario(scenario_tables, contributions_order):
+
     """
     Génère une liste de (main_figure, legend_figure) pour chaque scénario,
     affichant un graphique en barres empilées (verticales) des contributions relatives.
@@ -359,10 +360,8 @@ def plot_relative_contribution_by_scenario(scenario_tables):
         # Identifier toutes les contributions présentes
         all_contributions = set()
         for table in scenario_tables.values():
-            contribution_columns = [
-                col for col in table.columns
-                if col.startswith("%") and col != "%Total Impact"
-            ]
+            contribution_columns = [f"% {c}" for c in contributions_order if f"% {c}" in table.columns]
+
             all_contributions.update(contribution_columns)
 
         # Générer la palette de couleurs
@@ -489,7 +488,8 @@ def plot_relative_contribution_by_scenario(scenario_tables):
 
 
 
-def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
+def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contributions_order):
+
     """
     Génère des (main_figure, legend_figure) pour chaque scénario
     affichant un bar chart horizontal empilé des contributions relatives.
@@ -511,10 +511,9 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
         # Identifier toutes les contributions
         all_contributions = set()
         for table in scenario_tables.values():
-            contribution_columns = [
-                col for col in table.columns
-                if col.startswith("%") and col != "%Total Impact"
-            ]
+            
+            contribution_columns = [f"% {c}" for c in contributions_order if f"% {c}" in table.columns]
+                
             all_contributions.update(contribution_columns)
 
         # Générer la palette de couleurs
@@ -644,7 +643,8 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables):
 
 
 
-def plot_stacked_bar_by_category(initial_table, total_impact_table):
+def plot_stacked_bar_by_category(initial_table, total_impact_table, contributions_order):
+
     """
     Génère (main_figure, legend_figure, category_name) pour chaque catégorie d’impact.
     Utilise les valeurs réelles (initial_table). Adapté pour affichage dans Streamlit via st.pyplot().
@@ -711,7 +711,9 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
             bars = []
             labels = []
 
-            for contribution in contributions:
+            for contribution in contributions_order:
+                if contribution not in contributions:
+                    continue  # ignorer si non trouvé
                 values = []
                 for s in scenarios:
                     try:
@@ -815,7 +817,9 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table):
 
 
 
-def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table):
+def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order):
+
+
     """
     Génère des graphiques combinés par scénario avec hachures et légendes.
     Retourne une liste de tuples : (description, figure).
@@ -901,7 +905,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                 bottom_pos = np.zeros(len(categories))
                 bottom_neg = np.zeros(len(categories))
 
-                for contrib in contributions:
+                for contrib in [c for c in contributions_order if c in contributions]:
+
                     try:
                         values = (
                             percentage_table.xs((scenario, contrib), axis=1, level=[0, 1])
@@ -1202,6 +1207,14 @@ def main():
                 st.warning("⚠️ The selected sheet does not follow the expected template. Please verify that the sheet structure matches the required format (scenarios in row 1, contributions in row 2, categories in column A starting from row 3).")
             else: 
              contributions_list = extract_contributions_from_initial_table(initial_table)
+             st.sidebar.subheader("🔢 Contribution stacking order")
+             contributions_order = st.sidebar.multiselect(
+    "🪜 Order of contributions (bottom to top)", 
+    options=contributions_list, 
+    default=contributions_list,
+    key="custom_contribution_order"
+)
+ 
 
              # Génération des couleurs par défaut
              from matplotlib import colors as mcolors
@@ -1313,7 +1326,8 @@ def main():
                           if generate_scenario_details and scenario_tables:
                                st.markdown("---")
                                st.header("Detailed Analysis by Scenario (Vertical)")
-                               scenario_figures = plot_relative_contribution_by_scenario(scenario_tables)
+                               scenario_figures = plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
+
                                for idx, (main_fig, legend_fig) in enumerate(scenario_figures):
                                       scenario_name = list(scenario_tables.keys())[idx]
                                       st.subheader(f"Scenario: {scenario_name}")
@@ -1378,7 +1392,8 @@ def main():
                           if generate_scenario_details_horizontal and scenario_tables:
                                st.markdown("---")
                                st.header("Detailed Analysis by Scenario (Horizontal)")
-                               horizontal_figures = plot_relative_contribution_by_scenario_horizontal(scenario_tables)
+                               horizontal_figures = plot_relative_contribution_by_scenario_horizontal(scenario_tables, contributions_order)
+
                                for idx, (main_fig, legend_fig) in enumerate(horizontal_figures):
                                       scenario_name = list(scenario_tables.keys())[idx]
                                       st.subheader(f"Scenario: {scenario_name} (Horizontal)")
@@ -1443,7 +1458,8 @@ def main():
                           if generate_category_details and percentage_table is not None and total_impact_table is not None:
                                               st.markdown("---")
                                               st.header("Detailed Analysis by Impact Category")
-                                              category_figures = plot_stacked_bar_by_category(initial_table, total_impact_table)
+                                              category_figures = plot_stacked_bar_by_category(initial_table, total_impact_table, contributions_order)
+
                                               if category_figures:
                                                   for main_fig, legend_fig, category_name in category_figures:
                                                       st.subheader(f"Category: {category_name}")
@@ -1463,7 +1479,8 @@ def main():
                           if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios")
-                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table)
+                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order)
+
                           
                               if combined_figures:
                                   # Séparer légendes et courbes
