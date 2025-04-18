@@ -1245,15 +1245,23 @@ def find_file_path(file_name, start_directory=None):
 ###############################
 
 def main():
-    hide_st_style = """
+   hide_st_style = """
         <style>
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         </style>
         """
-    st.markdown(hide_st_style, unsafe_allow_html=True)
+   st.markdown(hide_st_style, unsafe_allow_html=True)
+    # 🌐 Barre de navigation
+   page = st.sidebar.radio("📁 Navigation", ["Introduction", "Graph Generator"])
+
     
-    global scenario_colors, contributions_colors, font_styles, scenario_hatches
+    
+   global scenario_colors, contributions_colors, font_styles, scenario_hatches
+    # 🌐 Barre de navigation
+   page = st.sidebar.radio("📁 Navigation", ["Introduction", "Graph Generator"])
+
+   if page == "Introduction":
     st.markdown(
     """
     <h1 style='text-align: center; font-size: 3em;'>
@@ -1306,8 +1314,10 @@ def main():
     )
 
     st.markdown("---")
+   elif page == "Graph Generator":
 
-
+    st.markdown("## 📊 Step 2: Upload and Generate Graphs")
+    
     # File uploader
     st.header("Step 2: Upload your filled Excel file")
     uploaded_file = st.file_uploader("Upload your completed Excel file", type=["xlsx"], key="file_upload_main")
