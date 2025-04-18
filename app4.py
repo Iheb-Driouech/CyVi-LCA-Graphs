@@ -1072,7 +1072,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         
         
 
-        y_positions = np.arange(len(categories)) * 1.5
+       
 
         scenario_hatch_dict = {scenario: scenario_hatches.get(scenario.split("(")[-1].replace(")", "").strip().lower(), None) for scenario in scenarios}
 
