@@ -1253,13 +1253,14 @@ def main():
         """
    st.markdown(hide_st_style, unsafe_allow_html=True)
     # 🌐 Barre de navigation
-   page = st.sidebar.radio("📁 Navigation", ["Introduction", "Graph Generator"], key="page_selector")
+   
 
     
     
    global scenario_colors, contributions_colors, font_styles, scenario_hatches
     # 🌐 Barre de navigation
-   page = st.sidebar.radio("📁 Navigation", ["Introduction", "Graph Generator"])
+   page = st.sidebar.radio("📁 Navigation", ["Introduction", "Graph Generator"], key="page_selector")
+
 
    if page == "Introduction":
     st.markdown(
