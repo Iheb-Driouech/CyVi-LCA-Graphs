@@ -1782,10 +1782,7 @@ def main():
                                   st.markdown("---")
                                   
                                   
-        except Exception as e:
-            st.error(f"Error while processing the file: {str(e)}")
-        # Colle ici les options et blocs de génération des courbes
-        ...
-
+        
+        
 if __name__ == "__main__":
     main()
