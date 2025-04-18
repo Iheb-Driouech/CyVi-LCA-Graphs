@@ -1245,6 +1245,14 @@ def find_file_path(file_name, start_directory=None):
 ###############################
 
 def main():
+    hide_st_style = """
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        </style>
+        """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
+    
     global scenario_colors, contributions_colors, font_styles, scenario_hatches
     st.markdown(
     """
@@ -1256,13 +1264,7 @@ def main():
     """,
     unsafe_allow_html=True
 )
-    hide_st_style = """
-        <style>
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        </style>
-        """
-    st.markdown(hide_st_style, unsafe_allow_html=True)
+    
 
     st.markdown("""
     This tool is designed to automatically generate insightful **Life Cycle Assessment (LCA)** graphs from a structured Excel file.
