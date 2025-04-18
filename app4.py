@@ -1316,26 +1316,6 @@ def main():
         )
 
        
-        st.markdown("""
-        <h1 style='text-align: center; font-size: 3em;'>
-            LCA Graph Dashboard 🌍
-        </h1>
-        """, unsafe_allow_html=True)
-
-        st.markdown("""
-        This tool is designed to automatically generate insightful **Life Cycle Assessment (LCA)** graphs from a structured Excel file.
-        ...
-        """)
-
-        with open("assets/LCA_template.xlsx", "rb") as f:
-            excel_bytes = f.read()
-
-        st.download_button(
-            label="📥 Download Excel Template",
-            data=excel_bytes,
-            file_name="LCA_template.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
         st.markdown("---")
 
     elif section == "📤 Upload & Preview":
