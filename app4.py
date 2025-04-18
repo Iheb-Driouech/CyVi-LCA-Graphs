@@ -1063,7 +1063,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         num_scenarios = len(scenarios)
         num_categories = len(categories)
         bar_height = min(0.9, max(0.3, 1.5 / num_scenarios))
-        line_spacing = 1.5 * bar_height
+        line_spacing = 2
         y_positions = np.arange(num_categories) * line_spacing
         fig_width = 12 + 0.5 * num_scenarios
         fig_height = max(6, num_categories * line_spacing * 0.7)
