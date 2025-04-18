@@ -1263,22 +1263,20 @@ def main():
         "📈 Graph Generation"
     ])
     
-    if "scenario_names_cleaned" not in st.session_state:
-        st.session_state["scenario_names_cleaned"] = []
-        st.session_state["contributions_list"] = []
-        st.session_state["initial_table"] = None
-        st.session_state["combined_table"] = None
-        st.session_state["total_impact_table"] = None
-        st.session_state["scenario_tables"] = None
-        st.session_state["percentage_table"] = None
+    # Initialiser les variables critiques si absentes
+    scenario_names_cleaned = st.session_state.get("scenario_names_cleaned", [])
+    contributions_list = st.session_state.get("contributions_list", [])
+    initial_table = st.session_state.get("initial_table", None)
+    total_impact_table = st.session_state.get("total_impact_table", None)
+    combined_table = st.session_state.get("combined_table", None)
+    scenario_tables = st.session_state.get("scenario_tables", None)
+    percentage_table = st.session_state.get("percentage_table", None)
+    contributions_order = st.session_state.get("contributions_order", [])
 
-        # flags de génération par défaut
-        st.session_state["generate_scenario_comparison"] = False
-        st.session_state["generate_scenario_details"] = False
-        st.session_state["generate_scenario_details_horizontal"] = False
-        st.session_state["generate_combined_charts"] = False
-        st.session_state["generate_combined_charts_horizontal"] = False
-        st.session_state["generate_category_details"] = False       
+    scenario_colors = scenario_colors if "scenario_colors" in globals() else {}
+    contributions_colors = contributions_colors if "contributions_colors" in globals() else {}
+    scenario_hatches = scenario_hatches if "scenario_hatches" in globals() else {}
+    font_styles = font_styles if font_styles is not None else get_font_styles()   
 
     if section == "🏁 Introduction":
         st.markdown(
