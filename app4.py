@@ -1263,7 +1263,16 @@ def main():
         "📈 Graph Generation"
     ])
     
+    
     # Initialiser les variables critiques si absentes
+    if "scenario_colors" not in globals():
+     scenario_colors = {}
+    if "contributions_colors" not in globals():
+     contributions_colors = {}
+    if "scenario_hatches" not in globals():
+     scenario_hatches = {}
+    if font_styles is None:
+     font_styles = get_font_styles()
     scenario_names_cleaned = st.session_state.get("scenario_names_cleaned", [])
     contributions_list = st.session_state.get("contributions_list", [])
     initial_table = st.session_state.get("initial_table", None)
