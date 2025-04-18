@@ -1356,7 +1356,10 @@ def main():
     default=contributions_list,
     key="custom_contribution_order"
 )
-             st.write("Ordre des contributions sélectionné :", contributions_order)
+             st.markdown("**Selected contribution order:**")
+             for contrib in contributions_order:
+               st.markdown(f"- {contrib}")
+
 
  
 
