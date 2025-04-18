@@ -1259,7 +1259,7 @@ def main():
     
    global scenario_colors, contributions_colors, font_styles, scenario_hatches
     # 🌐 Barre de navigation
-   page = st.sidebar.radio("📁 Navigation", ["Introduction", "Graph Generator"], key="page_selector")
+   page = st.radio("Select a page", ["Introduction", "Graph Generator"], key="page_selector", horizontal=True)
 
 
    if page == "Introduction":
