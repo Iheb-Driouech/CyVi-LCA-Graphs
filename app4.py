@@ -1252,150 +1252,104 @@ def main():
         </style>
         """
     st.markdown(hide_st_style, unsafe_allow_html=True)
-
+    
     global scenario_colors, contributions_colors, font_styles, scenario_hatches
-
-    # ▒▒▒▒▒ NAVIGATION ▒▒▒▒▒
-    section = st.sidebar.radio("🧭 Navigation", [
-        "🏁 Introduction",
-        "📤 Upload & Preview",
-        "🎨 Customization",
-        "📈 Graph Generation"
-    ])
+    st.markdown(
+    """
+    <h1 style='text-align: center; font-size: 3em;'>
+        LCA Graph Dashboard 🌍
+    </h1>
+    <p style='text-align: center; font-size: 1.1em;'>
+        
+    """,
+    unsafe_allow_html=True
+)
     
+
+    st.markdown("""
+    This tool is designed to automatically generate insightful **Life Cycle Assessment (LCA)** graphs from a structured Excel file.
+
+    It combines a simple data entry template with a Python-powered interface to visualize your environmental impact data across multiple dimensions, including:
+    - 📊 **Scenario comparison**
+    - 🧩 **Relative contribution charts (vertical & horizontal)**
+    - 📚 **Impact analysis by category**
+    - 🎯 **Combined views of scenarios and contributions**
+    """)
+
+    st.markdown("---")
+
+    # ----------------------------------------
+    # 🔹 Étape 1 : Télécharger la template
+    # ----------------------------------------
+    st.header("Step 1: Prepare your data")
+
+    st.markdown("""
+    Download the Excel template below and fill in your LCA data accordingly.
+
+    **Structuring rules:**
+    - You can define multiple scenarios.
+    - Each scenario can include multiple contributions.
+    - A contribution can appear in several scenarios.
+    - You can include as many impact categories as needed.
     
-    # Initialiser les variables critiques si absentes
-    if "scenario_colors" not in globals():
-     scenario_colors = {}
-    if "contributions_colors" not in globals():
-     contributions_colors = {}
-    if "scenario_hatches" not in globals():
-     scenario_hatches = {}
-    if font_styles is None:
-     font_styles = get_font_styles()
-    scenario_names_cleaned = st.session_state.get("scenario_names_cleaned", [])
-    contributions_list = st.session_state.get("contributions_list", [])
-    initial_table = st.session_state.get("initial_table", None)
-    total_impact_table = st.session_state.get("total_impact_table", None)
-    combined_table = st.session_state.get("combined_table", None)
-    scenario_tables = st.session_state.get("scenario_tables", None)
-    percentage_table = st.session_state.get("percentage_table", None)
-    contributions_order = st.session_state.get("contributions_order", [])
+    🔎 **Note**: The Excel file already contains examples data to help you visualize the kind of charts that will be generated.
+    """)
 
-    scenario_colors = scenario_colors if "scenario_colors" in globals() else {}
-    contributions_colors = contributions_colors if "contributions_colors" in globals() else {}
-    scenario_hatches = scenario_hatches if "scenario_hatches" in globals() else {}
-    font_styles = font_styles if font_styles is not None else get_font_styles()   
+    with open("assets/LCA_template.xlsx", "rb") as f:
+        excel_bytes = f.read()
 
-    if section == "🏁 Introduction":
-        st.markdown(
-        """
-        <h1 style='text-align: center; font-size: 3em;'>
-            LCA Graph Dashboard 🌍
-        </h1>
-        <p style='text-align: center; font-size: 1.1em;'>
+    st.download_button(
+        label="📥 Download Excel Template",
+        data=excel_bytes,
+        file_name="LCA_template.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    st.markdown("---")
+
+
+    # File uploader
+    st.header("Step 2: Upload your filled Excel file")
+    uploaded_file = st.file_uploader("Upload your completed Excel file", type=["xlsx"], key="file_upload_main")
+
+    if uploaded_file is not None:
+        try:
+            # Lire les feuilles disponibles dans le fichier
+            excel_file = pd.ExcelFile(uploaded_file)
+            sheet_names = excel_file.sheet_names
+
+            # Choix de la feuille par l'utilisateur
+            selected_sheet = st.selectbox("📄 Choose the sheet to analyze", sheet_names)
+
+            # Affichage aperçu rapide (5 premières lignes)
+            preview_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, nrows=5)
+            with st.expander("👁️ Preview of the selected sheet"):
+                st.dataframe(preview_df)
             
-        """,
-        unsafe_allow_html=True
-    )
-        
+            
+            
+            
+            # Analyze the Excel file from a specified sheet (e.g., "Feuil2")
+            initial_table, combined_table, total_impact_table, scenario_names_cleaned = analyze_excel_and_generate_tables(
+                uploaded_file, sheet_name=selected_sheet
+            )
+            # Si l'analyse a échoué
+            if initial_table is None or combined_table is None or total_impact_table is None:
+                st.warning("⚠️ The selected sheet does not follow the expected template. Please verify that the sheet structure matches the required format (scenarios in row 1, contributions in row 2, categories in column A starting from row 3).")
+            else: 
+             contributions_list = extract_contributions_from_initial_table(initial_table)
+             st.sidebar.subheader("🔢 Contribution stacking order")
+             contributions_order = st.sidebar.multiselect(
+    "🪜 Order of contributions (bottom to top)", 
+    options=contributions_list, 
+    default=contributions_list,
+    key="custom_contribution_order"
+)
+             st.write("Ordre des contributions sélectionné :", contributions_order)
 
-        st.markdown("""
-        This tool is designed to automatically generate insightful **Life Cycle Assessment (LCA)** graphs from a structured Excel file.
+ 
 
-        It combines a simple data entry template with a Python-powered interface to visualize your environmental impact data across multiple dimensions, including:
-        - 📊 **Scenario comparison**
-        - 🧩 **Relative contribution charts (vertical & horizontal)**
-        - 📚 **Impact analysis by category**
-        - 🎯 **Combined views of scenarios and contributions**
-        """)
-
-        st.markdown("---")
-
-        # ----------------------------------------
-        # 🔹 Étape 1 : Télécharger la template
-        # ----------------------------------------
-        st.header("Step 1: Prepare your data")
-
-        st.markdown("""
-        Download the Excel template below and fill in your LCA data accordingly.
-
-        **Structuring rules:**
-        - You can define multiple scenarios.
-        - Each scenario can include multiple contributions.
-        - A contribution can appear in several scenarios.
-        - You can include as many impact categories as needed.
-        
-        🔎 **Note**: The Excel file already contains examples data to help you visualize the kind of charts that will be generated.
-        """)
-
-        with open("assets/LCA_template.xlsx", "rb") as f:
-            excel_bytes = f.read()
-
-        st.download_button(
-            label="📥 Download Excel Template",
-            data=excel_bytes,
-            file_name="LCA_template.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-       
-        st.markdown("---")
-
-    elif section == "📤 Upload & Preview":
-        st.header("Step 2: Upload your filled Excel file")
-        uploaded_file = st.file_uploader("Upload your completed Excel file", type=["xlsx"], key="file_upload_main")
-
-        if uploaded_file is not None:
-            try:
-                # Lire les feuilles disponibles dans le fichier
-                excel_file = pd.ExcelFile(uploaded_file)
-                sheet_names = excel_file.sheet_names
-
-                # Choix de la feuille par l'utilisateur
-                selected_sheet = st.selectbox("📄 Choose the sheet to analyze", sheet_names)
-
-                # Affichage aperçu rapide (5 premières lignes)
-                preview_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, nrows=5)
-                with st.expander("👁️ Preview of the selected sheet"):
-                    st.dataframe(preview_df)
-                
-                
-                
-                
-                # Analyze the Excel file from a specified sheet (e.g., "Feuil2")
-                initial_table, combined_table, total_impact_table, scenario_names_cleaned = analyze_excel_and_generate_tables(
-                    uploaded_file, sheet_name=selected_sheet
-                )
-                # Si l'analyse a échoué
-                if initial_table is None or combined_table is None or total_impact_table is None:
-                    st.warning("⚠️ The selected sheet does not follow the expected template. Please verify that the sheet structure matches the required format (scenarios in row 1, contributions in row 2, categories in column A starting from row 3).")
-                else: 
-                 contributions_list = extract_contributions_from_initial_table(initial_table)
-                 st.sidebar.subheader("🔢 Contribution stacking order")
-                 contributions_order = st.sidebar.multiselect(
-        "🪜 Order of contributions (bottom to top)", 
-        options=contributions_list, 
-        default=contributions_list,
-        key="custom_contribution_order"
-    )
-                 st.write("Ordre des contributions sélectionné :", contributions_order)
-                 # Mise à jour session_state
-                 st.session_state["scenario_names_cleaned"] = scenario_names_cleaned
-                 st.session_state["contributions_list"] = contributions_list
-                 st.session_state["initial_table"] = initial_table
-                 st.session_state["combined_table"] = combined_table
-                 st.session_state["total_impact_table"] = total_impact_table
-                 st.session_state["contributions_order"] = contributions_order
-            except Exception as e:
-                    st.error(f"Error while processing the file: {str(e)}")
-        
-    elif section == "🎨 Customization":
-        if not st.session_state["scenario_names_cleaned"] or not st.session_state["contributions_list"]:
-            st.warning("⚠️ Veuillez d'abord uploader et analyser un fichier dans l'étape '📤 Upload & Preview'.")
-            return
-        else:
-        # Génération des couleurs par défaut
+             # Génération des couleurs par défaut
              from matplotlib import colors as mcolors
 
 
@@ -1469,13 +1423,11 @@ def main():
 )
                           generate_combined_charts = combined_chart_mode == "Vertical"
                           generate_combined_charts_horizontal = combined_chart_mode == "Horizontal"
-      
 
-    elif section == "📈 Graph Generation":
-        if st.session_state["initial_table"] is None or st.session_state["total_impact_table"] is None:
-            st.warning("⚠️ Veuillez d'abord uploader un fichier et configurer les options dans les étapes précédentes.")
-            return
-        else:
+                          
+                          
+
+
                 # 1) Scenario Comparison
                           if generate_scenario_comparison and total_impact_table is not None:
                                 st.markdown("---")
@@ -1801,7 +1753,9 @@ def main():
                                   st.markdown("---")
                                   
                                   
-        
-        
+        except Exception as e:
+            st.error(f"Error while processing the file: {str(e)}")
+
+
 if __name__ == "__main__":
     main()
