@@ -1262,6 +1262,23 @@ def main():
         "🎨 Customization",
         "📈 Graph Generation"
     ])
+    
+    if "scenario_names_cleaned" not in st.session_state:
+        st.session_state["scenario_names_cleaned"] = []
+        st.session_state["contributions_list"] = []
+        st.session_state["initial_table"] = None
+        st.session_state["combined_table"] = None
+        st.session_state["total_impact_table"] = None
+        st.session_state["scenario_tables"] = None
+        st.session_state["percentage_table"] = None
+
+        # flags de génération par défaut
+        st.session_state["generate_scenario_comparison"] = False
+        st.session_state["generate_scenario_details"] = False
+        st.session_state["generate_scenario_details_horizontal"] = False
+        st.session_state["generate_combined_charts"] = False
+        st.session_state["generate_combined_charts_horizontal"] = False
+        st.session_state["generate_category_details"] = False       
 
     if section == "🏁 Introduction":
         st.markdown(
@@ -1356,10 +1373,21 @@ def main():
         key="custom_contribution_order"
     )
                  st.write("Ordre des contributions sélectionné :", contributions_order)
+                 # Mise à jour session_state
+                 st.session_state["scenario_names_cleaned"] = scenario_names_cleaned
+                 st.session_state["contributions_list"] = contributions_list
+                 st.session_state["initial_table"] = initial_table
+                 st.session_state["combined_table"] = combined_table
+                 st.session_state["total_impact_table"] = total_impact_table
+                 st.session_state["contributions_order"] = contributions_order
             except Exception as e:
                     st.error(f"Error while processing the file: {str(e)}")
         
     elif section == "🎨 Customization":
+        if not st.session_state["scenario_names_cleaned"] or not st.session_state["contributions_list"]:
+            st.warning("⚠️ Veuillez d'abord uploader et analyser un fichier dans l'étape '📤 Upload & Preview'.")
+            return
+        else:
         # Génération des couleurs par défaut
              from matplotlib import colors as mcolors
 
@@ -1437,6 +1465,10 @@ def main():
       
 
     elif section == "📈 Graph Generation":
+        if st.session_state["initial_table"] is None or st.session_state["total_impact_table"] is None:
+            st.warning("⚠️ Veuillez d'abord uploader un fichier et configurer les options dans les étapes précédentes.")
+            return
+        else:
                 # 1) Scenario Comparison
                           if generate_scenario_comparison and total_impact_table is not None:
                                 st.markdown("---")
