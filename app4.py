@@ -1253,7 +1253,7 @@ def main():
         """
    st.markdown(hide_st_style, unsafe_allow_html=True)
     # 🌐 Barre de navigation
-   page = st.sidebar.radio("📁 Navigation", ["Introduction", "Graph Generator"])
+   page = st.sidebar.radio("📁 Navigation", ["Introduction", "Graph Generator"], key="page_selector")
 
     
     
