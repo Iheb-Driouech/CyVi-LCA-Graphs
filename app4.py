@@ -1244,87 +1244,83 @@ def find_file_path(file_name, start_directory=None):
 #           Main App
 ###############################
 
-def main():
-    hide_st_style = """
-        <style>
+# ⛔ Cacher la barre de menu et le footer
+st.markdown(
+    """
+    <style>
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
-        </style>
-        """
-    st.markdown(hide_st_style, unsafe_allow_html=True)
-    
-    global scenario_colors, contributions_colors, font_styles, scenario_hatches
-    st.markdown(
-    """
-    <h1 style='text-align: center; font-size: 3em;'>
-        LCA Graph Dashboard 🌍
-    </h1>
-    <p style='text-align: center; font-size: 1.1em;'>
-        
-    """,
-    unsafe_allow_html=True
+    </style>
+    """, unsafe_allow_html=True
 )
-    
+
+# 🔘 Navigation entre sections
+section = st.sidebar.radio(
+    "Navigation",
+    ("🏠 Accueil", "📥 Importer le fichier", "🎨 Personnaliser", "🌟 Générer les graphiques")
+)
+
+# 🎡 Spinner lors du chargement de données
+if section == "🏠 Accueil":
+    st.markdown("""
+    <h1 style='text-align: center; font-size: 3em;'>LCA Graph Dashboard 🌍</h1>
+    <p style='text-align: center;'>Bienvenue dans l'outil de génération automatique de graphiques d'Analyse de Cycle de Vie (ACV).</p>
+    """, unsafe_allow_html=True)
 
     st.markdown("""
-    This tool is designed to automatically generate insightful **Life Cycle Assessment (LCA)** graphs from a structured Excel file.
-
-    It combines a simple data entry template with a Python-powered interface to visualize your environmental impact data across multiple dimensions, including:
-    - 📊 **Scenario comparison**
-    - 🧩 **Relative contribution charts (vertical & horizontal)**
-    - 📚 **Impact analysis by category**
-    - 🎯 **Combined views of scenarios and contributions**
+    Cette application vous permet de :  
+    - 📥 Importer un fichier Excel structuré  
+    - 🎨 Personnaliser les couleurs, polices et motifs  
+    - 📊 Générer des graphiques comparatifs et analytiques  
     """)
 
-    st.markdown("---")
-
-    # ----------------------------------------
-    # 🔹 Étape 1 : Télécharger la template
-    # ----------------------------------------
-    st.header("Step 1: Prepare your data")
-
-    st.markdown("""
-    Download the Excel template below and fill in your LCA data accordingly.
-
-    **Structuring rules:**
-    - You can define multiple scenarios.
-    - Each scenario can include multiple contributions.
-    - A contribution can appear in several scenarios.
-    - You can include as many impact categories as needed.
-    
-    🔎 **Note**: The Excel file already contains examples data to help you visualize the kind of charts that will be generated.
-    """)
+elif section == "📥 Importer le fichier":
+    st.header("Étape 1 : Importez votre fichier Excel")
 
     with open("assets/LCA_template.xlsx", "rb") as f:
         excel_bytes = f.read()
+    st.download_button("📥 Télécharger le modèle Excel", data=excel_bytes, file_name="LCA_template.xlsx")
 
-    st.download_button(
-        label="📥 Download Excel Template",
-        data=excel_bytes,
-        file_name="LCA_template.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    uploaded_file = st.file_uploader("📤 Déposez votre fichier Excel complété", type=["xlsx"], key="uploader")
+    if uploaded_file:
+        with st.spinner("Lecture du fichier..."):
+            try:
+                excel_file = pd.ExcelFile(uploaded_file)
+                st.session_state["sheet_names"] = excel_file.sheet_names
+                st.success("Fichier chargé avec succès.")
+                st.session_state["uploaded_file"] = uploaded_file
+            except Exception as e:
+                st.error(f"Erreur lors de la lecture du fichier : {e}")
 
-    st.markdown("---")
-
-
-    # File uploader
-    st.header("Step 2: Upload your filled Excel file")
-    uploaded_file = st.file_uploader("Upload your completed Excel file", type=["xlsx"], key="file_upload_main")
-
-    if uploaded_file is not None:
+elif section == "🎨 Personnaliser":
+    st.header("Étape 2 : Personnalisez votre visualisation")
+    if "uploaded_file" in st.session_state:
+        uploaded_file = st.session_state["uploaded_file"]
         try:
-            # Lire les feuilles disponibles dans le fichier
             excel_file = pd.ExcelFile(uploaded_file)
             sheet_names = excel_file.sheet_names
+            selected_sheet = st.selectbox("📄 Choisissez une feuille", sheet_names)
+            st.session_state["selected_sheet"] = selected_sheet
 
-            # Choix de la feuille par l'utilisateur
-            selected_sheet = st.selectbox("📄 Choose the sheet to analyze", sheet_names)
-
-            # Affichage aperçu rapide (5 premières lignes)
             preview_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, nrows=5)
-            with st.expander("👁️ Preview of the selected sheet"):
+            with st.expander("👁️ Aperçu de la feuille sélectionnée"):
                 st.dataframe(preview_df)
+        except Exception as e:
+            st.error(f"Erreur de traitement : {e}")
+    else:
+        st.warning("Veuillez d'abord importer un fichier dans l'étape précédente.")
+
+elif section == "🌟 Générer les graphiques":
+    st.header("Étape 3 : Générez vos graphiques LCA")
+    if "uploaded_file" in st.session_state and "selected_sheet" in st.session_state:
+        st.markdown("📊 Chargement et traitement des données...")
+        with st.spinner("Analyse du fichier Excel et génération des tableaux..."):
+            # Appel à ton analyse et visualisation ici
+            # Exemple : initial_table, ... = analyze_excel_and_generate_tables(...)
+            st.success("Simulation : les tableaux ACV ont été générés avec succès. Tu peux maintenant appeler tes fonctions graphiques ici.")
+    else:
+            st.warning("Veuillez importer un fichier et sélectionner une feuille dans les étapes précédentes.")
+        
             
             # Analyze the Excel file from a specified sheet (e.g., "Feuil2")
             initial_table, combined_table, total_impact_table, scenario_names_cleaned = analyze_excel_and_generate_tables(
