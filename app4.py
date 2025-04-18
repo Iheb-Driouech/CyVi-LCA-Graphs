@@ -1061,7 +1061,15 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         scenarios = percentage_table.columns.levels[0]
         contributions = percentage_table.columns.levels[1]
         num_scenarios = len(scenarios)
-        bar_height = 0.9 / num_scenarios
+        num_categories = len(categories)
+        bar_height = min(0.9, max(0.3, 1.5 / num_scenarios))
+        line_spacing = 1.5 * bar_height
+        y_positions = np.arange(num_categories) * line_spacing
+        fig_width = 12 + 0.5 * num_scenarios
+        fig_height = max(6, num_categories * line_spacing * 0.7)
+        
+        
+
         y_positions = np.arange(len(categories)) * 1.5
 
         scenario_hatch_dict = {scenario: scenario_hatches.get(scenario.split("(")[-1].replace(")", "").strip().lower(), None) for scenario in scenarios}
@@ -1074,7 +1082,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         scenario_color_map = {scen: scenario_colors.get(scen.strip().lower(), "#FFFFFF") for scen in scenarios}
 
         def create_figure(show_totals=False):
-            fig, ax = plt.subplots(figsize=(16, 10), dpi=300)
+            fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
             title = "Combined Scenarios Analysis (Horizontal)"
             title += " (with Totals)" if show_totals else ""
             ax.set_title(title, fontsize=title_size, pad=80, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
