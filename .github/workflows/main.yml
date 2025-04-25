@@ -1,21 +1,20 @@
-# .github/workflows/keepalive.yml
-name: Keep Streamlit App Alive
-
-on:
-  schedule:
-    - cron: '0 * * * *'  # Toutes les heures
-  workflow_dispatch:        # Permet de le lancer manuellement aussi
-
-jobs:
-  keepalive:
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Make empty commit
+      - name: Setup Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Pull latest changes
+        run: |
+          git pull origin main --rebase
+
+      - name: Make empty commit
+        run: |
           git commit --allow-empty -m "Keepalive commit"
-          git push
+
+      - name: Push changes
+        run: |
+          git push origin main
