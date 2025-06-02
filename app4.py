@@ -443,7 +443,8 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
                     color="black",
                     fontweight=fontweight,
                     fontstyle=fontstyle,
-                    family=fontfamily
+                    family=fontfamily,
+                    rotation=90
                 )
 
             main_ax.set_title(
