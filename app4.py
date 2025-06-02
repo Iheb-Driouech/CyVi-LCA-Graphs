@@ -433,7 +433,7 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
 
             # Ajouter les valeurs totales au-dessus
             for i, total in enumerate(total_impact):
-                formatted_value = f"{total:.2f}" if abs(total) <= 1000 else f"{total:.2E}"
+                formatted_value = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
                 main_ax.text(
                     i, max(bottom_pos[i], 0) + 1,
                     formatted_value,
@@ -589,7 +589,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contribut
 
             # Affichage des valeurs totales à droite
             for i, total in enumerate(total_impact):
-                formatted_value = f"{total:.2f}" if abs(total) <= 1000 else f"{total:.2E}"
+                formatted_value = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
                 main_ax.text(
                     max(left_pos[i], 0) + 5,
                     i,
