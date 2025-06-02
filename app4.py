@@ -450,7 +450,7 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
             main_ax.set_title(
                 f"Relative Contributions - {scenario_name.capitalize()}",
                 fontsize=title_size,
-                pad=40,
+                pad=70,
                 fontweight=fontweight,
                 fontstyle=fontstyle,
                 family=fontfamily
