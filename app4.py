@@ -950,7 +950,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                     try:
                         totals = total_impact_table[scenario_clean].values
                         for j, total in enumerate(totals):
-                            formatted = f"{total:.2E}" if abs(total) >= 1000 else f"{total:.2f}"
+                            formatted = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+
                             ax.text(
                                 x_positions[j] + i * bar_width,
                                 bottom_pos[j] + 2,
@@ -1116,7 +1117,8 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
                     try:
                         totals = total_impact_table[scenario_clean].values
                         for j, total in enumerate(totals):
-                            formatted = f"{total:.2E}" if abs(total) >= 1000 else f"{total:.2f}"
+                            formatted = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+
                             ax.text(left_pos[j] + 2, y_positions[j] + i * bar_height, formatted, va='center', ha='left', fontsize=text_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
                     except KeyError:
                         pass
