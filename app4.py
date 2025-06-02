@@ -555,9 +555,9 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contribut
 
             categories = table["Impact Category"]
             contribution_columns = [
-                col for col in table.columns
-                if col.startswith("%") and col != "%Total Impact"
-            ]
+    f"% {c}" for c in contributions_order if f"% {c}" in table.columns
+]
+
             percentage_data = table[contribution_columns].astype(float)
             total_impact = table["Total Impact"].astype(float)
             bar_height = 0.6
