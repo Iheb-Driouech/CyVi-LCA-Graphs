@@ -366,6 +366,7 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
                  continue
 
 
+            all_contributions.update(contribution_columns)
 
         # Générer la palette de couleurs
         contribution_colors = {}
@@ -522,6 +523,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contribut
                            continue
 
                 
+            all_contributions.update(contribution_columns)
 
         # Générer la palette de couleurs
         contribution_color_map = {}
