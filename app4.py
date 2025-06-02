@@ -361,6 +361,10 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
         all_contributions = set()
         for table in scenario_tables.values():
             contribution_columns = [f"% {c}" for c in contributions_order if f"% {c}" in table.columns]
+            # 🔒 Skip scénario si aucune contribution n’est présente
+            if not contribution_columns:
+                 continue
+
 
             all_contributions.update(contribution_columns)
 
@@ -514,6 +518,10 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contribut
         for table in scenario_tables.values():
             
             contribution_columns = [f"% {c}" for c in contributions_order if f"% {c}" in table.columns]
+            # 🔒 Skip scénario si aucune contribution n’est présente
+            if not contribution_columns:
+                           continue
+
                 
             all_contributions.update(contribution_columns)
 
