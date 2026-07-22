@@ -41,6 +41,19 @@ def get_font_styles():
     }
 
 
+def clean_scenario_name(name):
+    """
+    Extrait le nom entre parenthèses s'il y en a, sinon renvoie le nom complet.
+    Ex: "Scenario 1 (Baseline)" -> "Baseline" ; "mechano" -> "mechano".
+    """
+    name = str(name)
+    start = name.find("(")
+    end = name.find(")")
+    if start != -1 and end > start:
+        return name[start + 1 : end].strip()
+    return name.strip()
+
+
 def analyze_excel_and_generate_tables(file_path, sheet_name=0):
     """
     Analyzes the specified Excel file and sheet, identifying scenarios, contributions,
@@ -55,7 +68,7 @@ def analyze_excel_and_generate_tables(file_path, sheet_name=0):
         scenario_row = data.iloc[0, 1:]
         scenario_names = scenario_row.unique()
         scenario_names_cleaned = [
-            name[name.find("(") + 1 : name.find(")")].strip().lower()
+            clean_scenario_name(name).lower()
             for name in scenario_names
         ]
         print(f"Detected scenarios ({len(scenario_names_cleaned)}): {scenario_names_cleaned}")
@@ -78,7 +91,7 @@ def analyze_excel_and_generate_tables(file_path, sheet_name=0):
 
         # Replace columns with simplified scenario names
         total_impact_table.columns = [
-            name[name.find("(") + 1 : name.find(")")].strip()
+            clean_scenario_name(name)
             for name in total_impact_table.columns
         ]
 
