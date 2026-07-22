@@ -917,10 +917,6 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         # Fonction interne pour créer un graphique
         def create_figure(show_totals=False):
             fig, ax = plt.subplots(figsize=(16, 10), dpi=300)
-            title = "Combined Scenarios Analysis"
-            title += " (with Totals)" if show_totals else ""
-            ax.set_title(title, fontsize=title_size, pad=80,
-                         fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.tick_params(axis='y', labelsize=label_size)
 
             for i, scenario in enumerate(scenarios):
@@ -1112,9 +1108,6 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
 
         def create_figure(show_totals=False):
             fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
-            title = "Combined Scenarios Analysis (Horizontal)"
-            title += " (with Totals)" if show_totals else ""
-            ax.set_title(title, fontsize=title_size, pad=80, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.tick_params(axis='x', labelsize=label_size)
 
             for i, scenario in enumerate(scenarios):
