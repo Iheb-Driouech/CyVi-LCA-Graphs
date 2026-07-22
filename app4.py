@@ -901,11 +901,11 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         if scenario_colors is not None:
             if isinstance(scenario_colors, dict):
                 for scen in scenarios:
-                    key = scen.strip().lower()
+                    key = clean_scenario_name(scen).lower()
                     scenario_color_map[scen] = scenario_colors.get(key, "#FFFFFF")
             elif hasattr(scenario_colors, "iterrows"):
                 for scen in scenarios:
-                    key = scen.strip().lower()
+                    key = clean_scenario_name(scen).lower()
                     match = scenario_colors[
                         scenario_colors["Scenario"].str.lower() == key
                     ]
@@ -1104,7 +1104,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         contrib_color_map = {contrib: contributions_colors.get(contrib.replace("%", "").strip().lower(), cmap(i % 10)) for i, contrib in enumerate(contributions)}
 
         # Couleurs scénarios
-        scenario_color_map = {scen: scenario_colors.get(scen.strip().lower(), "#FFFFFF") for scen in scenarios}
+        scenario_color_map = {scen: scenario_colors.get(clean_scenario_name(scen).lower(), "#FFFFFF") for scen in scenarios}
 
         def create_figure(show_totals=False):
             fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
