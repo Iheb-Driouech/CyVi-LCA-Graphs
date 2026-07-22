@@ -1035,7 +1035,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 
         scenario_handles = [
         plt.Rectangle((0, 0), 1, 1,
-                  facecolor=scenario_color_map[scenario],
+                  facecolor='white',
                   hatch=None if scenario_hatch_dict[scenario] in [None, "None"] else scenario_hatch_dict[scenario]
 ,
                   edgecolor='black')
@@ -1166,7 +1166,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
 
         legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=300)
         ax2.axis('off')
-        scenario_handles = [plt.Rectangle((0, 0), 1, 1, facecolor=scenario_color_map[scenario], hatch=None if scenario_hatch_dict[scenario] in [None, "None"] else scenario_hatch_dict[scenario], edgecolor='black') for scenario in scenarios]
+        scenario_handles = [plt.Rectangle((0, 0), 1, 1, facecolor='white', hatch=None if scenario_hatch_dict[scenario] in [None, "None"] else scenario_hatch_dict[scenario], edgecolor='black') for scenario in scenarios]
         scenario_labels = [s.split("(")[-1].replace(")", "").strip() for s in scenarios]
         legend2 = ax2.legend(scenario_handles, scenario_labels, title="Scenarios", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center')
         legend2.get_frame().set_linewidth(0)
