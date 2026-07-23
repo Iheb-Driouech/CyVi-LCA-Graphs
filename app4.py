@@ -839,6 +839,37 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table, contribution
 
 
 
+def finalize_fixed_axes(fig, ax, ax_w_in, ax_h_in, pad_in=0.15):
+    """
+    Fixe la taille physique du diagramme (l'axes) a ax_w_in x ax_h_in pouces,
+    puis agrandit la figure pour englober tout le contenu (labels, totaux)
+    sans jamais retrecir le diagramme. La taille du diagramme reste donc
+    identique entre 'Main Chart' et 'Chart with Totals' ; seule l'image
+    entiere grandit (surtout en hauteur) selon la taille du texte.
+    """
+    try:
+        # Figure temporaire genereuse pour ne rien clipper pendant la mesure
+        tw, th = ax_w_in + 10.0, ax_h_in + 10.0
+        fig.set_size_inches(tw, th)
+        ax.set_position([5.0 / tw, 5.0 / th, ax_w_in / tw, ax_h_in / th])
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        # Bounding box de tout le contenu (en pouces)
+        tb = fig.get_tightbbox(renderer)
+        ab = ax.get_window_extent(renderer).transformed(fig.dpi_scale_trans.inverted())
+        new_w = tb.width + 2 * pad_in
+        new_h = tb.height + 2 * pad_in
+        left_in = (ab.x0 - tb.x0) + pad_in
+        bottom_in = (ab.y0 - tb.y0) + pad_in
+        # La police est en points (taille absolue) : agrandir la figure ne
+        # change pas le texte, donc le diagramme garde exactement ax_w_in x ax_h_in
+        fig.set_size_inches(new_w, new_h)
+        ax.set_position([left_in / new_w, bottom_in / new_h, ax_w_in / new_w, ax_h_in / new_h])
+    except Exception:
+        fig.tight_layout()
+    return fig
+
+
 def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order):
 
 
@@ -997,7 +1028,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                           fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.axhline(0, color='black', linestyle='--', alpha=0.5)
             ax.set_ylim(top=100)
-            plt.tight_layout()
+            finalize_fixed_axes(fig, ax, 14.0, 8.0)
             return fig
 
         # Graphiques principaux
@@ -1151,7 +1182,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
             ax.set_xlabel("Contribution (%)", fontsize=label_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.axvline(0, color='black', linestyle='--', alpha=0.5)
             ax.set_xlim(left=min(left_neg) - 5, right=max(left_pos) + 5)
-            plt.tight_layout()
+            finalize_fixed_axes(fig, ax, max(6.0, fig_width - 3.0), max(4.0, fig_height - 1.2))
             return fig
 
         figures.append(("Main Chart (Horizontal)", create_figure(False)))
