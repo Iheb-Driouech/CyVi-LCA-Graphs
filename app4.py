@@ -30,6 +30,12 @@ def get_font_styles():
     text_size = st.sidebar.slider("Text Font Size", 6, 30, 10)
     legend_size = st.sidebar.slider("Legend Font Size", 6, 30, 10)
 
+    # Indices / exposants (CO2, m3...) dans la meme police que le reste du texte
+    plt.rcParams["mathtext.fontset"] = "custom"
+    plt.rcParams["mathtext.rm"] = family
+    plt.rcParams["mathtext.it"] = f"{family}:italic"
+    plt.rcParams["mathtext.bf"] = f"{family}:bold"
+
     return {
         "family": family,
         "weight": fontweight,
@@ -52,6 +58,69 @@ def clean_scenario_name(name):
     if start != -1 and end > start:
         return name[start + 1 : end].strip()
     return name.strip()
+
+
+# Les indices/exposants sont rendus avec la police du texte (pas une police "maths")
+plt.rcParams["mathtext.default"] = "regular"
+
+_MATHTEXT_SPECIAL = {"\\": r"\backslash ", "{": r"\{", "}": r"\}", "$": r"\$", "%": r"\%",
+                     "#": r"\#", "&": r"\&", "_": r"\_", "^": r"\wedge ", " ": r"\ "}
+
+
+def _escape_plain(text):
+    """Echappe le texte normal pour qu'il ne soit pas interprete par matplotlib."""
+    return str(text).replace("$", r"\$")
+
+
+def _to_mathtext(text, vert):
+    """Convertit un morceau de texte en indice ('subscript') ou exposant ('superscript')."""
+    esc = "".join(_MATHTEXT_SPECIAL.get(c, c) for c in str(text))
+    return f"$_{{{esc}}}$" if vert == "subscript" else f"$^{{{esc}}}$"
+
+
+def read_rich_category_labels(file_path, sheet_name, n_rows):
+    """
+    Relit la colonne A (a partir de la ligne 3) avec openpyxl pour conserver
+    les indices / exposants saisis dans Excel (ex. CO2 avec 2 en indice, m3 avec 3
+    en exposant) et les convertit en notation matplotlib (CO$_{2}$, m$^{3}$).
+    Retourne None si la lecture echoue (on garde alors les libelles bruts).
+    """
+    try:
+        from openpyxl import load_workbook
+        from openpyxl.cell.rich_text import CellRichText, TextBlock
+        if hasattr(file_path, "seek"):
+            file_path.seek(0)
+        wb = load_workbook(file_path, rich_text=True, data_only=True)
+        ws = wb.worksheets[sheet_name] if isinstance(sheet_name, int) else wb[sheet_name]
+        labels = []
+        for r in range(3, 3 + n_rows):
+            cell = ws.cell(row=r, column=1)
+            value = cell.value
+            if value is None:
+                labels.append(None)
+                continue
+            if isinstance(value, CellRichText):
+                parts = []
+                for block in value:
+                    if isinstance(block, TextBlock):
+                        vert = getattr(block.font, "vertAlign", None) if block.font is not None else None
+                        parts.append(_to_mathtext(block.text, vert) if vert in ("subscript", "superscript")
+                                     else _escape_plain(block.text))
+                    else:
+                        parts.append(_escape_plain(block))
+                labels.append("".join(parts))
+            else:
+                # Mise en forme appliquee a toute la cellule
+                vert = getattr(cell.font, "vertAlign", None) if cell.font is not None else None
+                labels.append(_to_mathtext(value, vert) if vert in ("subscript", "superscript")
+                              else _escape_plain(value))
+        return labels
+    except Exception as e:
+        print(f"Rich text labels not available, using plain text: {e}")
+        return None
+    finally:
+        if hasattr(file_path, "seek"):
+            file_path.seek(0)
 
 
 def analyze_excel_and_generate_tables(file_path, sheet_name=0):
@@ -79,6 +148,13 @@ def analyze_excel_and_generate_tables(file_path, sheet_name=0):
 
         # Step 3: Structure the data
         categories = data.iloc[2:, 0]
+        # Conserver les indices / exposants saisis dans Excel (CO2, m3, ...)
+        rich_labels = read_rich_category_labels(file_path, sheet_name, len(categories))
+        if rich_labels is not None and len(rich_labels) == len(categories):
+            categories = pd.Series(
+                [rl if rl is not None else c for rl, c in zip(rich_labels, categories)],
+                index=categories.index
+            )
         values = data.iloc[2:, 1:]
         values.columns = pd.MultiIndex.from_arrays([scenario_row, contribution_row])
         values.index = categories
