@@ -905,7 +905,7 @@ def default_combined_bar_length_cm(num_scenarios, orientation="vertical"):
 
 def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order,
                                               bar_width_cm=None, category_gap_cm=None,
-                                              bar_length_cm=None):
+                                              bar_length_cm=None, show_total_pct=True):
 
 
     """
@@ -1046,7 +1046,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                             formatted = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
                             max_val = cat_max_values[j]
                             pct = (total / max_val * 100) if max_val != 0 else 0
-                            label = f"{formatted} ({pct:.0f}%)"
+                            label = f"{formatted} ({pct:.0f}%)" if show_total_pct else formatted
 
                             ax.text(
                                 x_positions[j] + i * bar_width,
@@ -1137,7 +1137,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         return []
 def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order,
                                                          bar_width_cm=None, category_gap_cm=None,
-                                              bar_length_cm=None):
+                                              bar_length_cm=None, show_total_pct=True):
     """
     Génère des graphiques horizontaux combinés par scénario avec hachures et légendes.
     Retourne une liste de tuples : (description, figure).
@@ -1227,7 +1227,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
                             formatted = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
                             max_val = cat_max_values[j]
                             pct = (total / max_val * 100) if max_val != 0 else 0
-                            label = f"{formatted} ({pct:.0f}%)"
+                            label = f"{formatted} ({pct:.0f}%)" if show_total_pct else formatted
 
                             ax.text(left_pos[j] + 2, y_positions[j] + i * bar_height, label, va='center', ha='left', fontsize=text_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
                     except KeyError:
@@ -1554,6 +1554,7 @@ def main():
 
                           # 📏 Reglage de l'epaisseur des barres et de l'espace entre categories
                           combined_bar_cm, combined_gap_cm, combined_len_cm = None, None, None
+                          combined_show_pct = True
                           if combined_chart_mode != "Do not generate":
                               orientation = "vertical" if generate_combined_charts else "horizontal"
                               n_cat = len(percentage_table.index)
@@ -1575,6 +1576,12 @@ def main():
                                       min_value=0.0, max_value=20.0, value=float(def_gap_cm), step=0.05,
                                       key=f"combined_gap_cm_{orientation}_{n_cat}_{n_scen}",
                                       help="Empty space between two groups of bars (two impact categories)."
+                                  )
+                                  combined_show_pct = st.checkbox(
+                                      "Show percentage in brackets next to totals (Chart with Totals)",
+                                      value=True,
+                                      key="combined_show_total_pct",
+                                      help="Percentage relative to the highest-impact scenario of each category (= 100 %)."
                                   )
                                   combined_len_cm = col_len.number_input(
                                       f"Diagram {length_word} (cm)",
@@ -1786,7 +1793,7 @@ def main():
                           if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios")
-                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm)
+                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct)
 
                           
                               if combined_figures:
@@ -1861,7 +1868,7 @@ def main():
                           if generate_combined_charts_horizontal and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios (Horizontal)")
-                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm)
+                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct)
                               if combined_horizontal_figures:
                                   legends_h = {}
                                   charts_h = []
