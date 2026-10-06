@@ -893,7 +893,7 @@ def default_combined_bar_layout(num_categories, num_scenarios, orientation="vert
     return round(bar_cm, 2), round(gap_cm, 2)
 
 
-def place_total_labels(fig, ax, labels, orientation, axis_len_in, mode="smart", offset_pt=3.0):
+def place_total_labels(fig, ax, labels, orientation, axis_len_in, mode="smart", offset_pt=6.0):
     """
     Place les totaux SANS modifier l'axe (qui reste borne a 100 %).
     - mode "smart" : chaque total est colle a sa barre (decalage fixe en points) ;
@@ -908,6 +908,8 @@ def place_total_labels(fig, ax, labels, orientation, axis_len_in, mode="smart", 
     lo, hi = ax.get_ylim() if orientation == "vertical" else ax.get_xlim()
     pt_per_unit = axis_len_in * 72.0 / (hi - lo)
     for ann in labels:
+        # Ecart (en points) entre la barre - ou la bordure du cadre - et le texte
+        ann.xyann = (0, offset_pt) if orientation == "vertical" else (offset_pt, 0)
         x, y = ann.xy
         v = y if orientation == "vertical" else x
         bb = ann.get_window_extent(renderer)
@@ -932,7 +934,7 @@ def default_combined_bar_length_cm(num_scenarios, orientation="vertical"):
 def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order,
                                               bar_width_cm=None, category_gap_cm=None,
                                               bar_length_cm=None, show_total_pct=True,
-                                              totals_mode="smart"):
+                                              totals_mode="smart", totals_offset_pt=6.0):
 
 
     """
@@ -1102,7 +1104,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
             ax.set_ylim(top=100)
             ax.set_xlim(x_min, x_max)
             ax_height_in = max(1.0, (float(bar_length_cm) if bar_length_cm else default_combined_bar_length_cm(num_scenarios, "vertical")) / 2.54)
-            place_total_labels(fig, ax, total_labels, "vertical", ax_height_in, mode=totals_mode)
+            place_total_labels(fig, ax, total_labels, "vertical", ax_height_in, mode=totals_mode, offset_pt=totals_offset_pt)
             finalize_fixed_axes(fig, ax, ax_width_in, ax_height_in)
             return fig
 
@@ -1168,7 +1170,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
 def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order,
                                                          bar_width_cm=None, category_gap_cm=None,
                                               bar_length_cm=None, show_total_pct=True,
-                                              totals_mode="smart"):
+                                              totals_mode="smart", totals_offset_pt=6.0):
     """
     Génère des graphiques horizontaux combinés par scénario avec hachures et légendes.
     Retourne une liste de tuples : (description, figure).
@@ -1272,7 +1274,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
             ax.set_xlim(left=x_lo - 5, right=x_hi + 5)
             ax.set_ylim(y_min, y_max)
             ax_width_in = max(1.0, (float(bar_length_cm) if bar_length_cm else default_combined_bar_length_cm(num_scenarios, "horizontal")) / 2.54)
-            place_total_labels(fig, ax, total_labels, "horizontal", ax_width_in, mode=totals_mode)
+            place_total_labels(fig, ax, total_labels, "horizontal", ax_width_in, mode=totals_mode, offset_pt=totals_offset_pt)
             finalize_fixed_axes(fig, ax, ax_width_in, ax_height_in)
             return fig
 
@@ -1589,6 +1591,7 @@ def main():
                           combined_bar_cm, combined_gap_cm, combined_len_cm = None, None, None
                           combined_show_pct = True
                           combined_totals_mode = "smart"
+                          combined_totals_offset = 6.0
                           if combined_chart_mode != "Do not generate":
                               orientation = "vertical" if generate_combined_charts else "horizontal"
                               n_cat = len(percentage_table.index)
@@ -1626,6 +1629,12 @@ def main():
                                       help="The axis always stops at 100 %; totals are never crossed by the frame border."
                                   )
                                   combined_totals_mode = "smart" if totals_choice.startswith("Next") else "row"
+                                  combined_totals_offset = st.number_input(
+                                      "Gap between bar / frame and totals (pt)",
+                                      min_value=0.0, max_value=30.0, value=6.0, step=1.0,
+                                      key="combined_totals_offset",
+                                      help="Space between the end of the bar (or the frame border) and the total label. 1 pt ≈ 0.35 mm."
+                                  )
                                   combined_len_cm = col_len.number_input(
                                       f"Diagram {length_word} (cm)",
                                       min_value=3.0, max_value=60.0, value=float(def_len_cm), step=0.5,
@@ -1836,7 +1845,7 @@ def main():
                           if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios")
-                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode)
+                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode, combined_totals_offset)
 
                           
                               if combined_figures:
@@ -1911,7 +1920,7 @@ def main():
                           if generate_combined_charts_horizontal and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios (Horizontal)")
-                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode)
+                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode, combined_totals_offset)
                               if combined_horizontal_figures:
                                   legends_h = {}
                                   charts_h = []
