@@ -893,34 +893,30 @@ def default_combined_bar_layout(num_categories, num_scenarios, orientation="vert
     return round(bar_cm, 2), round(gap_cm, 2)
 
 
-def fit_total_labels(fig, ax, labels, orientation, axis_len_in, cap=100.0):
+def place_total_labels(fig, ax, labels, orientation, axis_len_in, mode="smart", offset_pt=3.0):
     """
-    Fait de la place aux totaux (decales de quelques points au-dessus / a droite
-    des barres) a l'INTERIEUR du cadre, pour qu'ils ne soient jamais barres par
-    la bordure. L'echelle reste identique : la portion lo -> cap garde exactement
-    axis_len_in pouces, et l'espace des totaux est AJOUTE au-dela.
-    Les graduations restent <= cap.
-    Retourne la nouvelle longueur d'axe (en pouces).
+    Place les totaux SANS modifier l'axe (qui reste borne a 100 %).
+    - mode "smart" : chaque total est colle a sa barre (decalage fixe en points) ;
+      s'il devait chevaucher la bordure du cadre, il est remonte juste au-dessus
+      du cadre (ou a droite en horizontal) pour ne jamais etre barre.
+    - mode "row" : tous les totaux sont alignes sur une ligne juste au-dessus
+      du cadre (a droite en horizontal).
     """
-    lo = ax.get_ylim()[0] if orientation == "vertical" else ax.get_xlim()[0]
-    ticks = [t for t in (ax.get_yticks() if orientation == "vertical" else ax.get_xticks())
-             if lo - 1e-9 <= t <= cap + 1e-9]
-    top = cap
-    if labels:
-        renderer = fig.canvas.get_renderer()
-        pt_per_unit = axis_len_in * 72.0 / (cap - lo)  # echelle fixe (points par %)
-        for ann in labels:
-            bb = ann.get_window_extent(renderer)
-            ext_px = bb.height if orientation == "vertical" else bb.width
-            need_pt = ext_px * 72.0 / fig.dpi + ann._claude_offset_pt + 4.0  # + petite marge
-            top = max(top, ann._claude_value + need_pt / pt_per_unit)
-    if orientation == "vertical":
-        ax.set_ylim(lo, top)
-        ax.set_yticks(ticks)
-    else:
-        ax.set_xlim(lo, top)
-        ax.set_xticks(ticks)
-    return axis_len_in * (top - lo) / (cap - lo)
+    if not labels:
+        return
+    renderer = fig.canvas.get_renderer()
+    lo, hi = ax.get_ylim() if orientation == "vertical" else ax.get_xlim()
+    pt_per_unit = axis_len_in * 72.0 / (hi - lo)
+    for ann in labels:
+        x, y = ann.xy
+        v = y if orientation == "vertical" else x
+        bb = ann.get_window_extent(renderer)
+        ext_pt = (bb.height if orientation == "vertical" else bb.width) * 72.0 / fig.dpi
+        # Fin du texte (en unites de donnees) s'il reste colle a la barre
+        end_v = v + (offset_pt + ext_pt) / pt_per_unit
+        if mode == "row" or end_v > hi:
+            v = hi  # demarre juste apres la bordure du cadre
+        ann.xy = (x, v) if orientation == "vertical" else (v, y)
 
 
 def default_combined_bar_length_cm(num_scenarios, orientation="vertical"):
@@ -935,7 +931,8 @@ def default_combined_bar_length_cm(num_scenarios, orientation="vertical"):
 
 def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order,
                                               bar_width_cm=None, category_gap_cm=None,
-                                              bar_length_cm=None, show_total_pct=True):
+                                              bar_length_cm=None, show_total_pct=True,
+                                              totals_mode="smart"):
 
 
     """
@@ -1079,7 +1076,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                             pct = (total / max_val * 100) if max_val != 0 else 0
                             label = f"{formatted} ({pct:.0f}%)" if show_total_pct else formatted
 
-                            ann = ax.annotate(
+                            total_labels.append(ax.annotate(
                                 label,
                                 xy=(x_positions[j] + i * bar_width, bottom_pos[j]),
                                 xytext=(0, 3), textcoords='offset points',
@@ -1089,11 +1086,9 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                                 fontsize=text_size,
                                 fontweight=fontweight,
                                 fontstyle=fontstyle,
-                                family=fontfamily
-                            )
-                            ann._claude_value = float(bottom_pos[j])
-                            ann._claude_offset_pt = 3.0
-                            total_labels.append(ann)
+                                family=fontfamily,
+                                annotation_clip=False
+                            ))
                     except KeyError:
                         pass
 
@@ -1107,7 +1102,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
             ax.set_ylim(top=100)
             ax.set_xlim(x_min, x_max)
             ax_height_in = max(1.0, (float(bar_length_cm) if bar_length_cm else default_combined_bar_length_cm(num_scenarios, "vertical")) / 2.54)
-            ax_height_in = fit_total_labels(fig, ax, total_labels, "vertical", ax_height_in)
+            place_total_labels(fig, ax, total_labels, "vertical", ax_height_in, mode=totals_mode)
             finalize_fixed_axes(fig, ax, ax_width_in, ax_height_in)
             return fig
 
@@ -1172,7 +1167,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         return []
 def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order,
                                                          bar_width_cm=None, category_gap_cm=None,
-                                              bar_length_cm=None, show_total_pct=True):
+                                              bar_length_cm=None, show_total_pct=True,
+                                              totals_mode="smart"):
     """
     Génère des graphiques horizontaux combinés par scénario avec hachures et légendes.
     Retourne une liste de tuples : (description, figure).
@@ -1265,10 +1261,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
                             pct = (total / max_val * 100) if max_val != 0 else 0
                             label = f"{formatted} ({pct:.0f}%)" if show_total_pct else formatted
 
-                            ann = ax.annotate(label, xy=(left_pos[j], y_positions[j] + i * bar_height), xytext=(3, 0), textcoords='offset points', va='center', ha='left', fontsize=text_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
-                            ann._claude_value = float(left_pos[j])
-                            ann._claude_offset_pt = 3.0
-                            total_labels.append(ann)
+                            total_labels.append(ax.annotate(label, xy=(left_pos[j], y_positions[j] + i * bar_height), xytext=(3, 0), textcoords='offset points', va='center', ha='left', fontsize=text_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily, annotation_clip=False))
                     except KeyError:
                         pass
 
@@ -1276,10 +1269,10 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
             ax.set_yticklabels(categories, fontsize=label_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.set_xlabel("Contribution (%)", fontsize=label_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.axvline(0, color='black', linestyle='--', alpha=0.5)
-            ax.set_xlim(left=x_lo - 5, right=max(100.0, x_hi) + (0 if total_labels else 5))
+            ax.set_xlim(left=x_lo - 5, right=x_hi + 5)
             ax.set_ylim(y_min, y_max)
             ax_width_in = max(1.0, (float(bar_length_cm) if bar_length_cm else default_combined_bar_length_cm(num_scenarios, "horizontal")) / 2.54)
-            ax_width_in = fit_total_labels(fig, ax, total_labels, "horizontal", ax_width_in, cap=max(100.0, x_hi))
+            place_total_labels(fig, ax, total_labels, "horizontal", ax_width_in, mode=totals_mode)
             finalize_fixed_axes(fig, ax, ax_width_in, ax_height_in)
             return fig
 
@@ -1595,6 +1588,7 @@ def main():
                           # 📏 Reglage de l'epaisseur des barres et de l'espace entre categories
                           combined_bar_cm, combined_gap_cm, combined_len_cm = None, None, None
                           combined_show_pct = True
+                          combined_totals_mode = "smart"
                           if combined_chart_mode != "Do not generate":
                               orientation = "vertical" if generate_combined_charts else "horizontal"
                               n_cat = len(percentage_table.index)
@@ -1623,6 +1617,15 @@ def main():
                                       key="combined_show_total_pct",
                                       help="Percentage relative to the highest-impact scenario of each category (= 100 %)."
                                   )
+                                  totals_choice = st.radio(
+                                      "Position of totals (Chart with Totals)",
+                                      ["Next to each bar (moved outside the frame only if it would cross it)",
+                                       "All aligned just outside the frame"],
+                                      index=0,
+                                      key="combined_totals_mode",
+                                      help="The axis always stops at 100 %; totals are never crossed by the frame border."
+                                  )
+                                  combined_totals_mode = "smart" if totals_choice.startswith("Next") else "row"
                                   combined_len_cm = col_len.number_input(
                                       f"Diagram {length_word} (cm)",
                                       min_value=3.0, max_value=60.0, value=float(def_len_cm), step=0.5,
@@ -1833,7 +1836,7 @@ def main():
                           if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios")
-                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct)
+                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode)
 
                           
                               if combined_figures:
@@ -1908,7 +1911,7 @@ def main():
                           if generate_combined_charts_horizontal and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios (Horizontal)")
-                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct)
+                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode)
                               if combined_horizontal_figures:
                                   legends_h = {}
                                   charts_h = []
