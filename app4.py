@@ -870,7 +870,31 @@ def finalize_fixed_axes(fig, ax, ax_w_in, ax_h_in, pad_in=0.15):
     return fig
 
 
-def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order):
+def default_combined_bar_layout(num_categories, num_scenarios, orientation="vertical"):
+    """
+    Valeurs par defaut (en cm) de l'epaisseur des barres et de l'espace entre
+    categories d'impact, calculees pour reproduire l'ancien rendu.
+    """
+    num_categories = max(1, num_categories)
+    num_scenarios = max(1, num_scenarios)
+    if orientation == "vertical":
+        # Ancien rendu : diagramme de 14 in, 1.5 unite par categorie, barres de 0.9/n
+        unit_cm = 14.0 * 2.54 / (num_categories * 1.5)
+        bar_cm = (0.9 / num_scenarios) * unit_cm
+        gap_cm = 0.6 * unit_cm
+    else:
+        # Ancien rendu horizontal : 2.0 unites par categorie
+        bar_h = min(0.9, max(0.3, 1.5 / num_scenarios))
+        fig_height = max(6, num_categories * 2.0 * 0.7)
+        ax_h_in = max(4.0, fig_height - 1.2)
+        unit_cm = ax_h_in * 2.54 / (num_categories * 2.0)
+        bar_cm = bar_h * unit_cm
+        gap_cm = max(0.1, 2.0 - num_scenarios * bar_h) * unit_cm
+    return round(bar_cm, 2), round(gap_cm, 2)
+
+
+def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order,
+                                              bar_width_cm=None, category_gap_cm=None):
 
 
     """
@@ -898,8 +922,16 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         scenarios = percentage_table.columns.levels[0]
         contributions = percentage_table.columns.levels[1]
         num_scenarios = len(scenarios)
-        bar_width = 0.9 / num_scenarios
-        x_positions = np.arange(len(categories))*1.5
+        # Epaisseur des barres et espace entre categories (en cm, 1 unite = 1 cm)
+        def_bar, def_gap = default_combined_bar_layout(len(categories), num_scenarios, "vertical")
+        bar_width = float(bar_width_cm) if bar_width_cm else def_bar
+        category_gap = float(category_gap_cm) if category_gap_cm is not None else def_gap
+        group_width = num_scenarios * bar_width
+        x_positions = np.arange(len(categories)) * (group_width + category_gap)
+        # Limites de l'axe : demi-espace de chaque cote
+        x_min = -bar_width / 2 - category_gap / 2
+        x_max = x_positions[-1] + group_width - bar_width / 2 + category_gap / 2
+        ax_width_in = max(2.0, (x_max - x_min) / 2.54)
 
         # Définir les hachures par scénario
         scenario_hatch_dict = {}
@@ -1028,7 +1060,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                           fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.axhline(0, color='black', linestyle='--', alpha=0.5)
             ax.set_ylim(top=100)
-            finalize_fixed_axes(fig, ax, 14.0, 8.0)
+            ax.set_xlim(x_min, x_max)
+            finalize_fixed_axes(fig, ax, ax_width_in, 8.0)
             return fig
 
         # Graphiques principaux
@@ -1090,7 +1123,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
     except Exception as e:
         st.error(f"Error generating combined scenario chart: {str(e)}")
         return []
-def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order):
+def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order,
+                                                         bar_width_cm=None, category_gap_cm=None):
     """
     Génère des graphiques horizontaux combinés par scénario avec hachures et légendes.
     Retourne une liste de tuples : (description, figure).
@@ -1116,12 +1150,17 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         contributions = percentage_table.columns.levels[1]
         num_scenarios = len(scenarios)
         num_categories = len(categories)
-        bar_height = min(0.9, max(0.3, 1.5 / num_scenarios))
-        line_spacing = 1.5 * bar_height
-        category_spacing = 2.0
-        y_positions = np.arange(num_categories) * category_spacing
+        # Epaisseur des barres et espace entre categories (en cm, 1 unite = 1 cm)
+        def_bar, def_gap = default_combined_bar_layout(num_categories, num_scenarios, "horizontal")
+        bar_height = float(bar_width_cm) if bar_width_cm else def_bar
+        category_gap = float(category_gap_cm) if category_gap_cm is not None else def_gap
+        group_height = num_scenarios * bar_height
+        y_positions = np.arange(num_categories) * (group_height + category_gap)
+        y_min = -bar_height / 2 - category_gap / 2
+        y_max = y_positions[-1] + group_height - bar_height / 2 + category_gap / 2
+        ax_height_in = max(1.0, (y_max - y_min) / 2.54)
         fig_width = 12 + 0.5 * num_scenarios
-        fig_height = max(6, num_categories * category_spacing * 0.7)
+        fig_height = ax_height_in + 1.2
 
         
         
@@ -1140,6 +1179,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         def create_figure(show_totals=False):
             fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
             ax.tick_params(axis='x', labelsize=label_size)
+            x_lo, x_hi = 0.0, 0.0  # etendue sur TOUS les scenarios
 
             for i, scenario in enumerate(scenarios):
                 left_pos = np.zeros(len(categories))
@@ -1162,6 +1202,9 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
                         ax.barh(y_positions + i * bar_height, neg_values, bar_height, left=left_neg, color=contrib_color_map[contrib], hatch=scenario_hatch_dict.get(scenario, None), edgecolor='black')
                         left_neg += neg_values
 
+                x_lo = min(x_lo, float(left_neg.min()))
+                x_hi = max(x_hi, float(left_pos.max()))
+
                 if show_totals:
                     scenario_clean = scenario.split("(")[-1].replace(")", "").strip()
                     try:
@@ -1181,8 +1224,9 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
             ax.set_yticklabels(categories, fontsize=label_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.set_xlabel("Contribution (%)", fontsize=label_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
             ax.axvline(0, color='black', linestyle='--', alpha=0.5)
-            ax.set_xlim(left=min(left_neg) - 5, right=max(left_pos) + 5)
-            finalize_fixed_axes(fig, ax, max(6.0, fig_width - 3.0), max(4.0, fig_height - 1.2))
+            ax.set_xlim(left=x_lo - 5, right=x_hi + 5)
+            ax.set_ylim(y_min, y_max)
+            finalize_fixed_axes(fig, ax, max(6.0, fig_width - 3.0), ax_height_in)
             return fig
 
         figures.append(("Main Chart (Horizontal)", create_figure(False)))
@@ -1494,6 +1538,34 @@ def main():
                           generate_combined_charts = combined_chart_mode == "Vertical"
                           generate_combined_charts_horizontal = combined_chart_mode == "Horizontal"
 
+                          # 📏 Reglage de l'epaisseur des barres et de l'espace entre categories
+                          combined_bar_cm, combined_gap_cm = None, None
+                          if combined_chart_mode != "Do not generate":
+                              orientation = "vertical" if generate_combined_charts else "horizontal"
+                              n_cat = len(percentage_table.index)
+                              n_scen = len(percentage_table.columns.levels[0])
+                              def_bar_cm, def_gap_cm = default_combined_bar_layout(n_cat, n_scen, orientation)
+                              size_word = "width" if orientation == "vertical" else "height"
+                              with st.expander("📏 Bar layout (combined view)", expanded=True):
+                                  col_bw, col_gap = st.columns(2)
+                                  combined_bar_cm = col_bw.number_input(
+                                      f"Bar {size_word} (cm)",
+                                      min_value=0.05, max_value=10.0, value=float(def_bar_cm), step=0.05,
+                                      key=f"combined_bar_cm_{orientation}_{n_cat}_{n_scen}",
+                                      help="Thickness of each scenario bar."
+                                  )
+                                  combined_gap_cm = col_gap.number_input(
+                                      "Space between impact categories (cm)",
+                                      min_value=0.0, max_value=20.0, value=float(def_gap_cm), step=0.05,
+                                      key=f"combined_gap_cm_{orientation}_{n_cat}_{n_scen}",
+                                      help="Empty space between two groups of bars (two impact categories)."
+                                  )
+                                  total_cm = n_cat * (n_scen * combined_bar_cm + combined_gap_cm)
+                                  st.caption(
+                                      f"Resulting diagram {size_word}: {total_cm:.1f} cm "
+                                      f"({total_cm / 2.54:.1f} in). Defaults reproduce the original layout."
+                                  )
+
                           
                           
 
@@ -1691,7 +1763,7 @@ def main():
                           if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios")
-                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order)
+                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm)
 
                           
                               if combined_figures:
@@ -1766,7 +1838,7 @@ def main():
                           if generate_combined_charts_horizontal and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios (Horizontal)")
-                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order)
+                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm)
                               if combined_horizontal_figures:
                                   legends_h = {}
                                   charts_h = []
