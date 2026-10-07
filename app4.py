@@ -47,6 +47,62 @@ def get_font_styles():
     }
 
 
+# Totaux de chaque categorie d'impact (tous scenarios), remplis dans main()
+TOTAL_GROUPS = {}
+
+
+def _fmt_total(v, extra=0):
+    """Format de base : 2 decimales (ou notation scientifique a 2 decimales
+    si |v| >= 1000 ou < 0.01), + `extra` decimales si necessaire."""
+    d = 2 + extra
+    if v != 0 and (abs(v) >= 1000 or abs(v) < 0.01):
+        return f"{v:.{d}E}"
+    return f"{v:.{d}f}"
+
+
+def _extra_decimals_needed(group, max_extra=4):
+    """
+    Plus petit nombre de decimales supplementaires pour que deux totaux
+    DIFFERENTS d'une meme categorie d'impact ne s'affichent jamais pareil
+    (ex. 0.0204 et 0.0164 -> "0.02" et "0.02" -> on passe a 0.020 / 0.016).
+    """
+    try:
+        vals = [float(x) for x in group if x is not None and np.isfinite(float(x))]
+    except Exception:
+        return 0
+    for extra in range(max_extra + 1):
+        ok = True
+        for i in range(len(vals)):
+            for j in range(i + 1, len(vals)):
+                if not np.isclose(vals[i], vals[j], rtol=1e-9, atol=0) and \
+                        _fmt_total(vals[i], extra) == _fmt_total(vals[j], extra):
+                    ok = False
+                    break
+            if not ok:
+                break
+        if ok:
+            return extra
+    return max_extra
+
+
+def format_total(value, category=None):
+    """
+    Formate un total avec 2 decimales par defaut, et ajoute des decimales
+    uniquement quand l'arrondi ferait disparaitre la difference entre les
+    scenarios de la meme categorie d'impact. Meme precision pour tous les
+    scenarios d'une categorie, et dans tous les graphes.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if np.isnan(v):
+        return "nan"
+    group = TOTAL_GROUPS.get(category) if category is not None else None
+    extra = _extra_decimals_needed(group) if group is not None else 0
+    return _fmt_total(v, extra)
+
+
 def clean_scenario_name(name):
     """
     Extrait le nom entre parenthèses s'il y en a, sinon renvoie le nom complet.
@@ -386,7 +442,7 @@ def plot_comparison_bar_chart(total_impact_table):
         for i, scenario in enumerate(scenarios):
             for j, value in enumerate(normalized_data[scenario]):
                 total_value = total_impact_table.loc[categories[j], scenario]
-                formatted_value = f"{total_value:.2f}" if 0.01 <= abs(total_value) <= 1000 else f"{total_value:.2E}"
+                formatted_value = format_total(total_value, categories[j])
                 ax3.text(
                     x_positions[j] + i * bar_width,
                     value + 2,
@@ -526,7 +582,7 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
 
             # Ajouter les valeurs totales au-dessus
             for i, total in enumerate(total_impact):
-                formatted_value = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+                formatted_value = format_total(total, list(categories)[i])
                 main_ax.text(
                     i, max(bottom_pos[i], 0) + 1,
                     formatted_value,
@@ -687,7 +743,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contribut
 
             # Affichage des valeurs totales à droite
             for i, total in enumerate(total_impact):
-                formatted_value = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+                formatted_value = format_total(total, list(categories)[i])
                 main_ax.text(
                     max(left_pos[i], 0) + 5,
                     i,
@@ -861,7 +917,7 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table, contribution
                 if scen_clean in total_impact_labels:
                     try:
                         total_value = total_impact_table.loc[category, total_impact_labels[scen_clean]]
-                        formatted = f"{total_value:.2f}" if 0.01 <= abs(total_value) <= 1000 else f"{total_value:.2E}"
+                        formatted = format_total(total_value, category)
                         main_ax.text(
                             x_positions[i],
                             max(bottom_pos[i], 0) + y_margin * 0.3,
@@ -1149,7 +1205,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                         totals = total_impact_table[scenario_clean].values
                         cat_max_values = total_impact_table.max(axis=1).values
                         for j, total in enumerate(totals):
-                            formatted = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+                            formatted = format_total(total, total_impact_table.index[j])
                             max_val = cat_max_values[j]
                             pct = (total / max_val * 100) if max_val != 0 else 0
                             label = f"{formatted} ({pct:.0f}%)" if show_total_pct else formatted
@@ -1334,7 +1390,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
                         totals = total_impact_table[scenario_clean].values
                         cat_max_values = total_impact_table.max(axis=1).values
                         for j, total in enumerate(totals):
-                            formatted = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+                            formatted = format_total(total, total_impact_table.index[j])
                             max_val = cat_max_values[j]
                             pct = (total / max_val * 100) if max_val != 0 else 0
                             label = f"{formatted} ({pct:.0f}%)" if show_total_pct else formatted
@@ -1573,6 +1629,9 @@ def main():
             if initial_table is None or combined_table is None or total_impact_table is None:
                 st.warning("⚠️ The selected sheet does not follow the expected template. Please verify that the sheet structure matches the required format (scenarios in row 1, contributions in row 2, categories in column A starting from row 3).")
             else: 
+             # Totaux par categorie (pour adapter la precision d'affichage des totaux)
+             TOTAL_GROUPS.clear()
+             TOTAL_GROUPS.update({cat: list(total_impact_table.loc[cat].values) for cat in total_impact_table.index})
              contributions_list = extract_contributions_from_initial_table(initial_table)
              st.sidebar.subheader("🔢 Contribution stacking order")
              contributions_order = st.sidebar.multiselect(
