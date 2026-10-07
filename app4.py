@@ -29,6 +29,13 @@ def get_font_styles():
     label_size = st.sidebar.slider("Label Font Size", 8, 30, 12)
     text_size = st.sidebar.slider("Text Font Size", 6, 30, 10)
     legend_size = st.sidebar.slider("Legend Font Size", 6, 30, 10)
+    precision_label = st.sidebar.selectbox(
+        "Totals: when 2-decimal rounding hides a difference",
+        list(PRECISION_MODES.keys()), index=0,
+        help="Totals use 2 decimals by default. If two different totals of the same impact "
+             "category would look identical (e.g. 0.020412 and 0.016847 -> 0.02), this option "
+             "chooses how more digits are shown. Example values in brackets."
+    )
 
     # Indices / exposants (CO2, m3...) dans la meme police que le reste du texte
     plt.rcParams["mathtext.fontset"] = "custom"
@@ -43,7 +50,8 @@ def get_font_styles():
         "title_size": title_size,
         "label_size": label_size,
         "text_size": text_size,
-        "legend_size": legend_size
+        "legend_size": legend_size,
+        "precision_mode": PRECISION_MODES[precision_label]
     }
 
 
@@ -51,45 +59,89 @@ def get_font_styles():
 TOTAL_GROUPS = {}
 
 
-def _fmt_total(v, extra=0):
+def _fmt_total(v, extra=0, truncate=False):
     """Format de base : 2 decimales (ou notation scientifique a 2 decimales
-    si |v| >= 1000 ou < 0.01), + `extra` decimales si necessaire."""
+    si |v| >= 1000 ou < 0.01), + `extra` decimales.
+    truncate=True : on COUPE les chiffres au lieu d'arrondir."""
+    from decimal import Decimal, ROUND_DOWN
     d = 2 + extra
-    if v != 0 and (abs(v) >= 1000 or abs(v) < 0.01):
-        return f"{v:.{d}E}"
-    return f"{v:.{d}f}"
+    sci = v != 0 and (abs(v) >= 1000 or abs(v) < 0.01)
+    if not truncate:
+        return f"{v:.{d}E}" if sci else f"{v:.{d}f}"
+    q = Decimal(1).scaleb(-d)  # 10^-d
+    dv = Decimal(repr(float(v)))
+    if sci:
+        exp = dv.copy_abs().adjusted()
+        mant = (dv.scaleb(-exp)).quantize(q, rounding=ROUND_DOWN)
+        return f"{mant}E{exp:+03d}"
+    return f"{dv.quantize(q, rounding=ROUND_DOWN)}"
 
 
-def _extra_decimals_needed(group, max_extra=4):
+# Modes proposes dans la sidebar quand l'arrondi a 2 decimales cache une difference
+PRECISION_MODES = {
+    "Truncate up to first differing digit + 1  (0.0204 / 0.0168)": "trunc_plus1",
+    "Truncate, no rounding  (0.020 / 0.016)": "trunc",
+    "Full value  (0.020412 / 0.016847)": "full",
+}
+
+
+def _fmt_full(v, max_sig=10):
+    """Valeur complete (sans arrondi visible), zeros inutiles retires."""
+    sci = v != 0 and (abs(v) >= 1000 or abs(v) < 0.01)
+    if sci:
+        mant, exp = f"{v:.{max_sig - 1}E}".split("E")
+        mant = mant.rstrip("0").rstrip(".") if "." in mant else mant
+        if "." not in mant:
+            mant += ".0"
+        return f"{mant}E{int(exp):+03d}"
+    txt = f"{v:.{max_sig}g}"
+    if "e" in txt.lower():
+        txt = f"{v:.{max_sig}f}"
+    if "." in txt:
+        txt = txt.rstrip("0").rstrip(".")
+    if "." not in txt or len(txt.split(".")[1]) < 2:   # au moins 2 decimales comme le format de base
+        txt = f"{float(txt):.2f}"
+    return txt
+
+
+def _total_format_mode(group, mode="trunc_plus1", max_extra=6):
     """
-    Plus petit nombre de decimales supplementaires pour que deux totaux
-    DIFFERENTS d'une meme categorie d'impact ne s'affichent jamais pareil
-    (ex. 0.0204 et 0.0164 -> "0.02" et "0.02" -> on passe a 0.020 / 0.016).
+    Renvoie (extra, truncate, full) pour une categorie d'impact :
+    - (0, False, False) si l'arrondi a 2 decimales distingue deja les totaux differents ;
+    - sinon, selon `mode` :
+        "trunc_plus1" : troncature jusqu'au 1er chiffre different + 1  (0.0204 / 0.0168)
+        "trunc"       : troncature jusqu'au 1er chiffre different      (0.020 / 0.016)
+        "full"        : valeur complete                               (0.020412 / 0.016847)
     """
     try:
         vals = [float(x) for x in group if x is not None and np.isfinite(float(x))]
     except Exception:
-        return 0
-    for extra in range(max_extra + 1):
-        ok = True
+        return 0, False, False
+
+    def collide(extra, trunc):
         for i in range(len(vals)):
             for j in range(i + 1, len(vals)):
                 if not np.isclose(vals[i], vals[j], rtol=1e-9, atol=0) and \
-                        _fmt_total(vals[i], extra) == _fmt_total(vals[j], extra):
-                    ok = False
-                    break
-            if not ok:
-                break
-        if ok:
-            return extra
-    return max_extra
+                        _fmt_total(vals[i], extra, trunc) == _fmt_total(vals[j], extra, trunc):
+                    return True
+        return False
+
+    if not collide(0, False):
+        return 0, False, False
+    if mode == "full":
+        return 0, False, True
+    for extra in range(1, max_extra + 1):
+        if not collide(extra, True):
+            return (min(extra + 1, max_extra) if mode == "trunc_plus1" else extra), True, False
+    return max_extra, True, False
 
 
 def format_total(value, category=None):
     """
-    Formate un total avec 2 decimales par defaut, et ajoute des decimales
-    uniquement quand l'arrondi ferait disparaitre la difference entre les
-    scenarios de la meme categorie d'impact. Meme precision pour tous les
+    Formate un total avec 2 decimales par defaut (arrondi). Si cet arrondi fait
+    disparaitre la difference entre des scenarios de la meme categorie d'impact,
+    on ajoute des decimales SANS arrondir (troncature) jusqu'au premier chiffre
+    different + 1. Meme precision pour tous les
     scenarios d'une categorie, et dans tous les graphes.
     """
     try:
@@ -99,8 +151,16 @@ def format_total(value, category=None):
     if np.isnan(v):
         return "nan"
     group = TOTAL_GROUPS.get(category) if category is not None else None
-    extra = _extra_decimals_needed(group) if group is not None else 0
-    return _fmt_total(v, extra)
+    mode = "trunc_plus1"
+    try:
+        if font_styles and font_styles.get("precision_mode"):
+            mode = font_styles["precision_mode"]
+    except Exception:
+        pass
+    extra, trunc, full = _total_format_mode(group, mode) if group is not None else (0, False, False)
+    if full:
+        return _fmt_full(v)
+    return _fmt_total(v, extra, trunc)
 
 
 def clean_scenario_name(name):
