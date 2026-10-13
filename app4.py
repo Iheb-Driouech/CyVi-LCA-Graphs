@@ -163,12 +163,13 @@ def format_total(value, category=None):
     return _fmt_total(v, extra, trunc)
 
 
-def legend_hatch(hatch, target=3):
+def legend_hatch(hatch, target_lines=4, target_cross=3):
     """
-    Hachure plus lisible pour les LEGENDES : dans un petit rectangle de legende,
-    une hachure "/" n'affiche qu'un seul trait. Pour les motifs de traits
-    (/ \\ | - + x X) on monte la densite a `target` (ex. "/" -> "///", "xx" -> "xxx")
-    ; les cercles et points (o O . *) restent tels quels pour ne pas faire un pave noir.
+    Hachure plus dense pour les LEGENDES : dans le petit rectangle de legende,
+    une hachure "/" n'affiche qu'un seul trait. On augmente la densite :
+    - traits simples (/ \\ | -) -> densite 4  (ex. "/" -> "////")
+    - motifs croises (x X +)     -> densite 3  (ex. "xx" -> "xxx")
+    - cercles et points (o O . *) inchanges (sinon pave noir).
     Le motif reste le meme que sur les barres.
     """
     if hatch in (None, "", "None"):
@@ -176,12 +177,13 @@ def legend_hatch(hatch, target=3):
     out = ""
     for ch in dict.fromkeys(str(hatch)):          # caracteres distincts, ordre conserve
         k = str(hatch).count(ch)
-        out += ch * (k if ch in "oO.*" else max(k, target))
+        if ch in "oO.*":
+            out += ch * k
+        elif ch in "xX+":
+            out += ch * max(k, target_cross)
+        else:
+            out += ch * max(k, target_lines)
     return out
-
-
-# Taille des rectangles de legende (en multiples de la taille de police)
-LEGEND_HANDLE = dict(handlelength=3.2, handleheight=1.8, handletextpad=0.8, columnspacing=2.0)
 
 
 def clean_scenario_name(name):
@@ -1343,8 +1345,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
     fontsize=legend_size,
     title_fontsize=legend_size,
     ncol=2,
-    loc='center',
-    **LEGEND_HANDLE
+    loc='center'
 )
         legend1.get_frame().set_linewidth(0) 
         
@@ -1371,8 +1372,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
     fontsize=legend_size,
     title_fontsize=legend_size,
     ncol=2,
-    loc='center',
-    **LEGEND_HANDLE
+    loc='center'
 )
         legend2.get_frame().set_linewidth(0)
         figures.append(("Scenarios Legend", legend_fig2))
@@ -1499,7 +1499,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         ax1.axis('off')
         contrib_handles = [plt.Rectangle((0, 0), 1, 1, facecolor=color, edgecolor='black') for _, color in contrib_color_map.items()]
         contrib_labels = list(contrib_color_map.keys())
-        legend1 = ax1.legend(contrib_handles, contrib_labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center', **LEGEND_HANDLE)
+        legend1 = ax1.legend(contrib_handles, contrib_labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center')
         legend1.get_frame().set_linewidth(0)
         figures.append(("Contributions Legend (Horizontal)", legend_fig1))
 
@@ -1507,7 +1507,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         ax2.axis('off')
         scenario_handles = [plt.Rectangle((0, 0), 1, 1, facecolor='white', hatch=legend_hatch(scenario_hatch_dict[scenario]), edgecolor='black') for scenario in scenarios]
         scenario_labels = [s.split("(")[-1].replace(")", "").strip() for s in scenarios]
-        legend2 = ax2.legend(scenario_handles, scenario_labels, title="Scenarios", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center', **LEGEND_HANDLE)
+        legend2 = ax2.legend(scenario_handles, scenario_labels, title="Scenarios", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center')
         legend2.get_frame().set_linewidth(0)
         figures.append(("Scenarios Legend (Horizontal)", legend_fig2))
 
