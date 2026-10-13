@@ -29,6 +29,19 @@ def get_font_styles():
     label_size = st.sidebar.slider("Label Font Size", 8, 30, 12)
     text_size = st.sidebar.slider("Text Font Size", 6, 30, 10)
     legend_size = st.sidebar.slider("Legend Font Size", 6, 30, 10)
+    precision_label = st.sidebar.selectbox(
+        "Totals: when 2-decimal rounding hides a difference",
+        list(PRECISION_MODES.keys()), index=0,
+        help="Totals use 2 decimals by default. If two different totals of the same impact "
+             "category would look identical (e.g. 0.020412 and 0.016847 -> 0.02), this option "
+             "chooses how more digits are shown. Example values in brackets."
+    )
+
+    # Indices / exposants (CO2, m3...) dans la meme police que le reste du texte
+    plt.rcParams["mathtext.fontset"] = "custom"
+    plt.rcParams["mathtext.rm"] = family
+    plt.rcParams["mathtext.it"] = f"{family}:italic"
+    plt.rcParams["mathtext.bf"] = f"{family}:bold"
 
     return {
         "family": family,
@@ -37,8 +50,140 @@ def get_font_styles():
         "title_size": title_size,
         "label_size": label_size,
         "text_size": text_size,
-        "legend_size": legend_size
+        "legend_size": legend_size,
+        "precision_mode": PRECISION_MODES[precision_label]
     }
+
+
+# Totaux de chaque categorie d'impact (tous scenarios), remplis dans main()
+TOTAL_GROUPS = {}
+
+
+def _fmt_total(v, extra=0, truncate=False):
+    """Format de base : 2 decimales (ou notation scientifique a 2 decimales
+    si |v| >= 1000 ou < 0.01), + `extra` decimales.
+    truncate=True : on COUPE les chiffres au lieu d'arrondir."""
+    from decimal import Decimal, ROUND_DOWN
+    d = 2 + extra
+    sci = v != 0 and (abs(v) >= 1000 or abs(v) < 0.01)
+    if not truncate:
+        return f"{v:.{d}E}" if sci else f"{v:.{d}f}"
+    q = Decimal(1).scaleb(-d)  # 10^-d
+    dv = Decimal(repr(float(v)))
+    if sci:
+        exp = dv.copy_abs().adjusted()
+        mant = (dv.scaleb(-exp)).quantize(q, rounding=ROUND_DOWN)
+        return f"{mant}E{exp:+03d}"
+    return f"{dv.quantize(q, rounding=ROUND_DOWN)}"
+
+
+# Modes proposes dans la sidebar quand l'arrondi a 2 decimales cache une difference
+PRECISION_MODES = {
+    "Truncate up to first differing digit + 1  (0.0204 / 0.0168)": "trunc_plus1",
+    "Truncate, no rounding  (0.020 / 0.016)": "trunc",
+    "Full value  (0.020412 / 0.016847)": "full",
+}
+
+
+def _fmt_full(v, max_sig=10):
+    """Valeur complete (sans arrondi visible), zeros inutiles retires."""
+    sci = v != 0 and (abs(v) >= 1000 or abs(v) < 0.01)
+    if sci:
+        mant, exp = f"{v:.{max_sig - 1}E}".split("E")
+        mant = mant.rstrip("0").rstrip(".") if "." in mant else mant
+        if "." not in mant:
+            mant += ".0"
+        return f"{mant}E{int(exp):+03d}"
+    txt = f"{v:.{max_sig}g}"
+    if "e" in txt.lower():
+        txt = f"{v:.{max_sig}f}"
+    if "." in txt:
+        txt = txt.rstrip("0").rstrip(".")
+    if "." not in txt or len(txt.split(".")[1]) < 2:   # au moins 2 decimales comme le format de base
+        txt = f"{float(txt):.2f}"
+    return txt
+
+
+def _total_format_mode(group, mode="trunc_plus1", max_extra=6):
+    """
+    Renvoie (extra, truncate, full) pour une categorie d'impact :
+    - (0, False, False) si l'arrondi a 2 decimales distingue deja les totaux differents ;
+    - sinon, selon `mode` :
+        "trunc_plus1" : troncature jusqu'au 1er chiffre different + 1  (0.0204 / 0.0168)
+        "trunc"       : troncature jusqu'au 1er chiffre different      (0.020 / 0.016)
+        "full"        : valeur complete                               (0.020412 / 0.016847)
+    """
+    try:
+        vals = [float(x) for x in group if x is not None and np.isfinite(float(x))]
+    except Exception:
+        return 0, False, False
+
+    def collide(extra, trunc):
+        for i in range(len(vals)):
+            for j in range(i + 1, len(vals)):
+                if not np.isclose(vals[i], vals[j], rtol=1e-9, atol=0) and \
+                        _fmt_total(vals[i], extra, trunc) == _fmt_total(vals[j], extra, trunc):
+                    return True
+        return False
+
+    if not collide(0, False):
+        return 0, False, False
+    if mode == "full":
+        return 0, False, True
+    for extra in range(1, max_extra + 1):
+        if not collide(extra, True):
+            return (min(extra + 1, max_extra) if mode == "trunc_plus1" else extra), True, False
+    return max_extra, True, False
+
+
+def format_total(value, category=None):
+    """
+    Formate un total avec 2 decimales par defaut (arrondi). Si cet arrondi fait
+    disparaitre la difference entre des scenarios de la meme categorie d'impact,
+    on ajoute des decimales SANS arrondir (troncature) jusqu'au premier chiffre
+    different + 1. Meme precision pour tous les
+    scenarios d'une categorie, et dans tous les graphes.
+    """
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if np.isnan(v):
+        return "nan"
+    group = TOTAL_GROUPS.get(category) if category is not None else None
+    mode = "trunc_plus1"
+    try:
+        if font_styles and font_styles.get("precision_mode"):
+            mode = font_styles["precision_mode"]
+    except Exception:
+        pass
+    extra, trunc, full = _total_format_mode(group, mode) if group is not None else (0, False, False)
+    if full:
+        return _fmt_full(v)
+    return _fmt_total(v, extra, trunc)
+
+
+def legend_hatch(hatch, target_lines=4, target_cross=3):
+    """
+    Hachure plus dense pour les LEGENDES : dans le petit rectangle de legende,
+    une hachure "/" n'affiche qu'un seul trait. On augmente la densite :
+    - traits simples (/ \\ | -) -> densite 4  (ex. "/" -> "////")
+    - motifs croises (x X +)     -> densite 3  (ex. "xx" -> "xxx")
+    - cercles et points (o O . *) inchanges (sinon pave noir).
+    Le motif reste le meme que sur les barres.
+    """
+    if hatch in (None, "", "None"):
+        return None
+    out = ""
+    for ch in dict.fromkeys(str(hatch)):          # caracteres distincts, ordre conserve
+        k = str(hatch).count(ch)
+        if ch in "oO.*":
+            out += ch * k
+        elif ch in "xX+":
+            out += ch * max(k, target_cross)
+        else:
+            out += ch * max(k, target_lines)
+    return out
 
 
 def clean_scenario_name(name):
@@ -52,6 +197,69 @@ def clean_scenario_name(name):
     if start != -1 and end > start:
         return name[start + 1 : end].strip()
     return name.strip()
+
+
+# Les indices/exposants sont rendus avec la police du texte (pas une police "maths")
+plt.rcParams["mathtext.default"] = "regular"
+
+_MATHTEXT_SPECIAL = {"\\": r"\backslash ", "{": r"\{", "}": r"\}", "$": r"\$", "%": r"\%",
+                     "#": r"\#", "&": r"\&", "_": r"\_", "^": r"\wedge ", " ": r"\ "}
+
+
+def _escape_plain(text):
+    """Echappe le texte normal pour qu'il ne soit pas interprete par matplotlib."""
+    return str(text).replace("$", r"\$")
+
+
+def _to_mathtext(text, vert):
+    """Convertit un morceau de texte en indice ('subscript') ou exposant ('superscript')."""
+    esc = "".join(_MATHTEXT_SPECIAL.get(c, c) for c in str(text))
+    return f"$_{{{esc}}}$" if vert == "subscript" else f"$^{{{esc}}}$"
+
+
+def read_rich_category_labels(file_path, sheet_name, n_rows):
+    """
+    Relit la colonne A (a partir de la ligne 3) avec openpyxl pour conserver
+    les indices / exposants saisis dans Excel (ex. CO2 avec 2 en indice, m3 avec 3
+    en exposant) et les convertit en notation matplotlib (CO$_{2}$, m$^{3}$).
+    Retourne None si la lecture echoue (on garde alors les libelles bruts).
+    """
+    try:
+        from openpyxl import load_workbook
+        from openpyxl.cell.rich_text import CellRichText, TextBlock
+        if hasattr(file_path, "seek"):
+            file_path.seek(0)
+        wb = load_workbook(file_path, rich_text=True, data_only=True)
+        ws = wb.worksheets[sheet_name] if isinstance(sheet_name, int) else wb[sheet_name]
+        labels = []
+        for r in range(3, 3 + n_rows):
+            cell = ws.cell(row=r, column=1)
+            value = cell.value
+            if value is None:
+                labels.append(None)
+                continue
+            if isinstance(value, CellRichText):
+                parts = []
+                for block in value:
+                    if isinstance(block, TextBlock):
+                        vert = getattr(block.font, "vertAlign", None) if block.font is not None else None
+                        parts.append(_to_mathtext(block.text, vert) if vert in ("subscript", "superscript")
+                                     else _escape_plain(block.text))
+                    else:
+                        parts.append(_escape_plain(block))
+                labels.append("".join(parts))
+            else:
+                # Mise en forme appliquee a toute la cellule
+                vert = getattr(cell.font, "vertAlign", None) if cell.font is not None else None
+                labels.append(_to_mathtext(value, vert) if vert in ("subscript", "superscript")
+                              else _escape_plain(value))
+        return labels
+    except Exception as e:
+        print(f"Rich text labels not available, using plain text: {e}")
+        return None
+    finally:
+        if hasattr(file_path, "seek"):
+            file_path.seek(0)
 
 
 def analyze_excel_and_generate_tables(file_path, sheet_name=0):
@@ -79,6 +287,13 @@ def analyze_excel_and_generate_tables(file_path, sheet_name=0):
 
         # Step 3: Structure the data
         categories = data.iloc[2:, 0]
+        # Conserver les indices / exposants saisis dans Excel (CO2, m3, ...)
+        rich_labels = read_rich_category_labels(file_path, sheet_name, len(categories))
+        if rich_labels is not None and len(rich_labels) == len(categories):
+            categories = pd.Series(
+                [rl if rl is not None else c for rl, c in zip(rich_labels, categories)],
+                index=categories.index
+            )
         values = data.iloc[2:, 1:]
         values.columns = pd.MultiIndex.from_arrays([scenario_row, contribution_row])
         values.index = categories
@@ -310,7 +525,7 @@ def plot_comparison_bar_chart(total_impact_table):
         for i, scenario in enumerate(scenarios):
             for j, value in enumerate(normalized_data[scenario]):
                 total_value = total_impact_table.loc[categories[j], scenario]
-                formatted_value = f"{total_value:.2f}" if 0.01 <= abs(total_value) <= 1000 else f"{total_value:.2E}"
+                formatted_value = format_total(total_value, categories[j])
                 ax3.text(
                     x_positions[j] + i * bar_width,
                     value + 2,
@@ -450,7 +665,7 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
 
             # Ajouter les valeurs totales au-dessus
             for i, total in enumerate(total_impact):
-                formatted_value = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+                formatted_value = format_total(total, list(categories)[i])
                 main_ax.text(
                     i, max(bottom_pos[i], 0) + 1,
                     formatted_value,
@@ -611,7 +826,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contribut
 
             # Affichage des valeurs totales à droite
             for i, total in enumerate(total_impact):
-                formatted_value = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+                formatted_value = format_total(total, list(categories)[i])
                 main_ax.text(
                     max(left_pos[i], 0) + 5,
                     i,
@@ -785,7 +1000,7 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table, contribution
                 if scen_clean in total_impact_labels:
                     try:
                         total_value = total_impact_table.loc[category, total_impact_labels[scen_clean]]
-                        formatted = f"{total_value:.2f}" if 0.01 <= abs(total_value) <= 1000 else f"{total_value:.2E}"
+                        formatted = format_total(total_value, category)
                         main_ax.text(
                             x_positions[i],
                             max(bottom_pos[i], 0) + y_margin * 0.3,
@@ -893,8 +1108,48 @@ def default_combined_bar_layout(num_categories, num_scenarios, orientation="vert
     return round(bar_cm, 2), round(gap_cm, 2)
 
 
+def place_total_labels(fig, ax, labels, orientation, axis_len_in, mode="smart", offset_pt=6.0):
+    """
+    Place les totaux SANS modifier l'axe (qui reste borne a 100 %).
+    - mode "smart" : chaque total est colle a sa barre (decalage fixe en points) ;
+      s'il devait chevaucher la bordure du cadre, il est remonte juste au-dessus
+      du cadre (ou a droite en horizontal) pour ne jamais etre barre.
+    - mode "row" : tous les totaux sont alignes sur une ligne juste au-dessus
+      du cadre (a droite en horizontal).
+    """
+    if not labels:
+        return
+    renderer = fig.canvas.get_renderer()
+    lo, hi = ax.get_ylim() if orientation == "vertical" else ax.get_xlim()
+    pt_per_unit = axis_len_in * 72.0 / (hi - lo)
+    for ann in labels:
+        # Ecart (en points) entre la barre - ou la bordure du cadre - et le texte
+        ann.xyann = (0, offset_pt) if orientation == "vertical" else (offset_pt, 0)
+        x, y = ann.xy
+        v = y if orientation == "vertical" else x
+        bb = ann.get_window_extent(renderer)
+        ext_pt = (bb.height if orientation == "vertical" else bb.width) * 72.0 / fig.dpi
+        # Fin du texte (en unites de donnees) s'il reste colle a la barre
+        end_v = v + (offset_pt + ext_pt) / pt_per_unit
+        if mode == "row" or end_v > hi:
+            v = hi  # demarre juste apres la bordure du cadre
+        ann.xy = (x, v) if orientation == "vertical" else (v, y)
+
+
+def default_combined_bar_length_cm(num_scenarios, orientation="vertical"):
+    """
+    Longueur par defaut (en cm) de l'echelle des barres (axe 0-100 %) :
+    hauteur du diagramme en vertical, largeur en horizontal (ancien rendu).
+    """
+    if orientation == "vertical":
+        return round(8.0 * 2.54, 1)
+    return round(max(6.0, 9.0 + 0.5 * max(1, num_scenarios)) * 2.54, 1)
+
+
 def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order,
-                                              bar_width_cm=None, category_gap_cm=None):
+                                              bar_width_cm=None, category_gap_cm=None,
+                                              bar_length_cm=None, show_total_pct=True,
+                                              totals_mode="smart", totals_offset_pt=6.0):
 
 
     """
@@ -980,6 +1235,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         # Fonction interne pour créer un graphique
         def create_figure(show_totals=False):
             fig, ax = plt.subplots(figsize=(16, 10), dpi=300)
+            total_labels = []
             ax.tick_params(axis='y', labelsize=label_size)
 
             for i, scenario in enumerate(scenarios):
@@ -1032,23 +1288,24 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                         totals = total_impact_table[scenario_clean].values
                         cat_max_values = total_impact_table.max(axis=1).values
                         for j, total in enumerate(totals):
-                            formatted = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+                            formatted = format_total(total, total_impact_table.index[j])
                             max_val = cat_max_values[j]
                             pct = (total / max_val * 100) if max_val != 0 else 0
-                            label = f"{formatted} ({pct:.0f}%)"
+                            label = f"{formatted} ({pct:.0f}%)" if show_total_pct else formatted
 
-                            ax.text(
-                                x_positions[j] + i * bar_width,
-                                bottom_pos[j] + 2,
+                            total_labels.append(ax.annotate(
                                 label,
+                                xy=(x_positions[j] + i * bar_width, bottom_pos[j]),
+                                xytext=(0, 3), textcoords='offset points',
                                 ha='center',
                                 va='bottom',
                                 rotation=90,
                                 fontsize=text_size,
                                 fontweight=fontweight,
                                 fontstyle=fontstyle,
-                                family=fontfamily
-                            )
+                                family=fontfamily,
+                                annotation_clip=False
+                            ))
                     except KeyError:
                         pass
 
@@ -1061,7 +1318,9 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
             ax.axhline(0, color='black', linestyle='--', alpha=0.5)
             ax.set_ylim(top=100)
             ax.set_xlim(x_min, x_max)
-            finalize_fixed_axes(fig, ax, ax_width_in, 8.0)
+            ax_height_in = max(1.0, (float(bar_length_cm) if bar_length_cm else default_combined_bar_length_cm(num_scenarios, "vertical")) / 2.54)
+            place_total_labels(fig, ax, total_labels, "vertical", ax_height_in, mode=totals_mode, offset_pt=totals_offset_pt)
+            finalize_fixed_axes(fig, ax, ax_width_in, ax_height_in)
             return fig
 
         # Graphiques principaux
@@ -1100,8 +1359,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         scenario_handles = [
         plt.Rectangle((0, 0), 1, 1,
                   facecolor='white',
-                  hatch=None if scenario_hatch_dict[scenario] in [None, "None"] else scenario_hatch_dict[scenario]
-,
+                  hatch=legend_hatch(scenario_hatch_dict[scenario]),
                   edgecolor='black')
         for scenario in scenarios
 ]
@@ -1124,7 +1382,9 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         st.error(f"Error generating combined scenario chart: {str(e)}")
         return []
 def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order,
-                                                         bar_width_cm=None, category_gap_cm=None):
+                                                         bar_width_cm=None, category_gap_cm=None,
+                                              bar_length_cm=None, show_total_pct=True,
+                                              totals_mode="smart", totals_offset_pt=6.0):
     """
     Génère des graphiques horizontaux combinés par scénario avec hachures et légendes.
     Retourne une liste de tuples : (description, figure).
@@ -1178,6 +1438,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
 
         def create_figure(show_totals=False):
             fig, ax = plt.subplots(figsize=(fig_width, fig_height), dpi=300)
+            total_labels = []
             ax.tick_params(axis='x', labelsize=label_size)
             x_lo, x_hi = 0.0, 0.0  # etendue sur TOUS les scenarios
 
@@ -1211,12 +1472,12 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
                         totals = total_impact_table[scenario_clean].values
                         cat_max_values = total_impact_table.max(axis=1).values
                         for j, total in enumerate(totals):
-                            formatted = f"{total:.2E}" if abs(total) >= 1000 or (abs(total) < 0.01 and total != 0) else f"{total:.2f}"
+                            formatted = format_total(total, total_impact_table.index[j])
                             max_val = cat_max_values[j]
                             pct = (total / max_val * 100) if max_val != 0 else 0
-                            label = f"{formatted} ({pct:.0f}%)"
+                            label = f"{formatted} ({pct:.0f}%)" if show_total_pct else formatted
 
-                            ax.text(left_pos[j] + 2, y_positions[j] + i * bar_height, label, va='center', ha='left', fontsize=text_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
+                            total_labels.append(ax.annotate(label, xy=(left_pos[j], y_positions[j] + i * bar_height), xytext=(3, 0), textcoords='offset points', va='center', ha='left', fontsize=text_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily, annotation_clip=False))
                     except KeyError:
                         pass
 
@@ -1226,7 +1487,9 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
             ax.axvline(0, color='black', linestyle='--', alpha=0.5)
             ax.set_xlim(left=x_lo - 5, right=x_hi + 5)
             ax.set_ylim(y_min, y_max)
-            finalize_fixed_axes(fig, ax, max(6.0, fig_width - 3.0), ax_height_in)
+            ax_width_in = max(1.0, (float(bar_length_cm) if bar_length_cm else default_combined_bar_length_cm(num_scenarios, "horizontal")) / 2.54)
+            place_total_labels(fig, ax, total_labels, "horizontal", ax_width_in, mode=totals_mode, offset_pt=totals_offset_pt)
+            finalize_fixed_axes(fig, ax, ax_width_in, ax_height_in)
             return fig
 
         figures.append(("Main Chart (Horizontal)", create_figure(False)))
@@ -1242,7 +1505,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
 
         legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=300)
         ax2.axis('off')
-        scenario_handles = [plt.Rectangle((0, 0), 1, 1, facecolor='white', hatch=None if scenario_hatch_dict[scenario] in [None, "None"] else scenario_hatch_dict[scenario], edgecolor='black') for scenario in scenarios]
+        scenario_handles = [plt.Rectangle((0, 0), 1, 1, facecolor='white', hatch=legend_hatch(scenario_hatch_dict[scenario]), edgecolor='black') for scenario in scenarios]
         scenario_labels = [s.split("(")[-1].replace(")", "").strip() for s in scenarios]
         legend2 = ax2.legend(scenario_handles, scenario_labels, title="Scenarios", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center')
         legend2.get_frame().set_linewidth(0)
@@ -1448,6 +1711,9 @@ def main():
             if initial_table is None or combined_table is None or total_impact_table is None:
                 st.warning("⚠️ The selected sheet does not follow the expected template. Please verify that the sheet structure matches the required format (scenarios in row 1, contributions in row 2, categories in column A starting from row 3).")
             else: 
+             # Totaux par categorie (pour adapter la precision d'affichage des totaux)
+             TOTAL_GROUPS.clear()
+             TOTAL_GROUPS.update({cat: list(total_impact_table.loc[cat].values) for cat in total_impact_table.index})
              contributions_list = extract_contributions_from_initial_table(initial_table)
              st.sidebar.subheader("🔢 Contribution stacking order")
              contributions_order = st.sidebar.multiselect(
@@ -1539,15 +1805,20 @@ def main():
                           generate_combined_charts_horizontal = combined_chart_mode == "Horizontal"
 
                           # 📏 Reglage de l'epaisseur des barres et de l'espace entre categories
-                          combined_bar_cm, combined_gap_cm = None, None
+                          combined_bar_cm, combined_gap_cm, combined_len_cm = None, None, None
+                          combined_show_pct = True
+                          combined_totals_mode = "smart"
+                          combined_totals_offset = 6.0
                           if combined_chart_mode != "Do not generate":
                               orientation = "vertical" if generate_combined_charts else "horizontal"
                               n_cat = len(percentage_table.index)
                               n_scen = len(percentage_table.columns.levels[0])
                               def_bar_cm, def_gap_cm = default_combined_bar_layout(n_cat, n_scen, orientation)
                               size_word = "width" if orientation == "vertical" else "height"
+                              length_word = "height" if orientation == "vertical" else "width"
+                              def_len_cm = default_combined_bar_length_cm(n_scen, orientation)
                               with st.expander("📏 Bar layout (combined view)", expanded=True):
-                                  col_bw, col_gap = st.columns(2)
+                                  col_bw, col_gap, col_len = st.columns(3)
                                   combined_bar_cm = col_bw.number_input(
                                       f"Bar {size_word} (cm)",
                                       min_value=0.05, max_value=10.0, value=float(def_bar_cm), step=0.05,
@@ -1560,10 +1831,38 @@ def main():
                                       key=f"combined_gap_cm_{orientation}_{n_cat}_{n_scen}",
                                       help="Empty space between two groups of bars (two impact categories)."
                                   )
+                                  combined_show_pct = st.checkbox(
+                                      "Show percentage in brackets next to totals (Chart with Totals)",
+                                      value=True,
+                                      key="combined_show_total_pct",
+                                      help="Percentage relative to the highest-impact scenario of each category (= 100 %)."
+                                  )
+                                  totals_choice = st.radio(
+                                      "Position of totals (Chart with Totals)",
+                                      ["Next to each bar (moved outside the frame only if it would cross it)",
+                                       "All aligned just outside the frame"],
+                                      index=0,
+                                      key="combined_totals_mode",
+                                      help="The axis always stops at 100 %; totals are never crossed by the frame border."
+                                  )
+                                  combined_totals_mode = "smart" if totals_choice.startswith("Next") else "row"
+                                  combined_totals_offset = st.number_input(
+                                      "Gap between bar / frame and totals (pt)",
+                                      min_value=0.0, max_value=30.0, value=6.0, step=1.0,
+                                      key="combined_totals_offset",
+                                      help="Space between the end of the bar (or the frame border) and the total label. 1 pt ≈ 0.35 mm."
+                                  )
+                                  combined_len_cm = col_len.number_input(
+                                      f"Diagram {length_word} (cm)",
+                                      min_value=3.0, max_value=60.0, value=float(def_len_cm), step=0.5,
+                                      key=f"combined_len_cm_{orientation}_{n_scen}",
+                                      help="Length of the 0-100 % scale, i.e. how long the bars are. "
+                                           "Labels and totals are added around it."
+                                  )
                                   total_cm = n_cat * (n_scen * combined_bar_cm + combined_gap_cm)
                                   st.caption(
-                                      f"Resulting diagram {size_word}: {total_cm:.1f} cm "
-                                      f"({total_cm / 2.54:.1f} in). Defaults reproduce the original layout."
+                                      f"Resulting diagram (bars area only): {total_cm:.1f} cm {size_word} "
+                                      f"× {combined_len_cm:.1f} cm {length_word}. Defaults reproduce the original layout."
                                   )
 
                           
@@ -1763,7 +2062,7 @@ def main():
                           if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios")
-                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm)
+                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode, combined_totals_offset)
 
                           
                               if combined_figures:
@@ -1838,7 +2137,7 @@ def main():
                           if generate_combined_charts_horizontal and percentage_table is not None and total_impact_table is not None:
                               st.markdown("---")
                               st.header("Combined View of All Scenarios (Horizontal)")
-                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm)
+                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode, combined_totals_offset)
                               if combined_horizontal_figures:
                                   legends_h = {}
                                   charts_h = []
