@@ -2,9 +2,76 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")  # rendu sans affichage (serveur)
 import matplotlib.pyplot as plt
+from matplotlib import colors as mcolors
 import os
 import io
+import re
+import json
+import zipfile
+import hashlib
+import threading
+
+
+###############################
+#   Constants
+###############################
+
+# Palette Okabe-Ito : distinguable par les personnes daltoniennes.
+# Le noir d'origine est remplace par un gris (les hachures noires restent visibles).
+OKABE_ITO = ["#0072B2", "#E69F00", "#009E73", "#D55E00",
+             "#56B4E9", "#CC79A7", "#F0E442", "#999999"]
+
+FONT_FAMILIES = ["DejaVu Sans", "sans-serif", "serif"]
+FONT_WEIGHTS = ["normal", "bold"]
+FONT_STYLES = ["normal", "italic"]
+# (nom, libelle, min, max, defaut)
+FONT_SIZE_SLIDERS = [
+    ("title_size", "Title Font Size", 10, 30, 16),
+    ("label_size", "Label Font Size", 8, 30, 12),
+    ("text_size", "Text Font Size", 6, 30, 10),
+    ("legend_size", "Legend Font Size", 6, 30, 10),
+]
+HATCH_CHOICES = ["///", "//", "/", "xx", "XX", "++", "--", "||", "..", "O", "oo", "None"]
+DEFAULT_HATCHES = ["//", "oo", "xx", "--", "||", "++", "..", "None"]
+
+PREVIEW_DPI = 110   # apercu a l'ecran (leger)
+EXPORT_DPI = 300    # telechargement PNG
+SETTINGS_VERSION = 1
+
+# Les fonctions de trace utilisent des variables globales (couleurs, polices...).
+# Streamlit sert plusieurs utilisateurs dans des threads differents : ce verrou
+# empeche deux rendus simultanes de melanger leurs reglages.
+_RENDER_LOCK = threading.Lock()
+
+
+def palette_color(i):
+    """Couleur n°i de la palette par defaut (Okabe-Ito)."""
+    return OKABE_ITO[i % len(OKABE_ITO)]
+
+
+class TemplateError(ValueError):
+    """Le fichier Excel ne respecte pas la template : message lisible pour l'utilisateur."""
+
+
+def unique_in_order(values):
+    """Valeurs uniques dans l'ordre d'apparition (contrairement a sorted(set(...)))."""
+    seen, out = set(), []
+    for v in values:
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            continue
+        if v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+
+def _ss_default(key, value):
+    """Initialise la valeur d'un widget dans st.session_state si elle n'existe pas encore."""
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 
 
@@ -16,33 +83,42 @@ import io
 #   Function Definitions
 ###############################
 
-font_styles = None  # sera rempli dans main()
+# Reglages utilises par les fonctions de trace, remplis par apply_render_settings()
+font_styles = None
+scenario_colors = None
+contributions_colors = None
+scenario_hatches = {}
 
 def get_font_styles():
     st.sidebar.subheader("🖋️ Font Style Settings")
 
-    family = st.sidebar.selectbox("Font Family", ["DejaVu Sans", "sans-serif", "serif"], index=0)
-    fontweight = st.sidebar.selectbox("Font Weight", ["normal", "bold"], index=0)
-    fontstyle = st.sidebar.selectbox("Font Style", ["normal", "italic"], index=0)
+    # Les widgets ont une cle fixe : leurs valeurs peuvent etre sauvegardees
+    # et rechargees depuis un fichier de reglages JSON.
+    _ss_default("font_family", FONT_FAMILIES[0])
+    _ss_default("font_weight", FONT_WEIGHTS[0])
+    _ss_default("font_style", FONT_STYLES[0])
+    family = st.sidebar.selectbox("Font Family", FONT_FAMILIES, key="font_family")
+    fontweight = st.sidebar.selectbox("Font Weight", FONT_WEIGHTS, key="font_weight")
+    fontstyle = st.sidebar.selectbox("Font Style", FONT_STYLES, key="font_style")
 
-    title_size = st.sidebar.slider("Title Font Size", 10, 30, 16)
-    label_size = st.sidebar.slider("Label Font Size", 8, 30, 12)
-    text_size = st.sidebar.slider("Text Font Size", 6, 30, 10)
-    legend_size = st.sidebar.slider("Legend Font Size", 6, 30, 10)
+    sizes = {}
+    for name, label, lo, hi, default in FONT_SIZE_SLIDERS:
+        _ss_default(f"font_{name}", default)
+        sizes[name] = st.sidebar.slider(label, lo, hi, key=f"font_{name}")
+    title_size, label_size = sizes["title_size"], sizes["label_size"]
+    text_size, legend_size = sizes["text_size"], sizes["legend_size"]
+
+    _ss_default("precision_mode_label", list(PRECISION_MODES.keys())[0])
     precision_label = st.sidebar.selectbox(
         "Totals: when 2-decimal rounding hides a difference",
-        list(PRECISION_MODES.keys()), index=0,
+        list(PRECISION_MODES.keys()), key="precision_mode_label",
         help="Totals use 2 decimals by default. If two different totals of the same impact "
              "category would look identical (e.g. 0.020412 and 0.016847 -> 0.02), this option "
              "chooses how more digits are shown. Example values in brackets."
     )
 
-    # Indices / exposants (CO2, m3...) dans la meme police que le reste du texte
-    plt.rcParams["mathtext.fontset"] = "custom"
-    plt.rcParams["mathtext.rm"] = family
-    plt.rcParams["mathtext.it"] = f"{family}:italic"
-    plt.rcParams["mathtext.bf"] = f"{family}:bold"
-
+    # Les rcParams (police des indices/exposants) sont appliques au moment du rendu,
+    # dans apply_render_settings(), sous verrou.
     return {
         "family": family,
         "weight": fontweight,
@@ -217,11 +293,11 @@ def _to_mathtext(text, vert):
     return f"$_{{{esc}}}$" if vert == "subscript" else f"$^{{{esc}}}$"
 
 
-def read_rich_category_labels(file_path, sheet_name, n_rows):
+def read_rich_category_labels(file_path, sheet_name, excel_rows):
     """
-    Relit la colonne A (a partir de la ligne 3) avec openpyxl pour conserver
-    les indices / exposants saisis dans Excel (ex. CO2 avec 2 en indice, m3 avec 3
-    en exposant) et les convertit en notation matplotlib (CO$_{2}$, m$^{3}$).
+    Relit la colonne A (lignes Excel `excel_rows`, numerotees a partir de 1) avec openpyxl
+    pour conserver les indices / exposants saisis dans Excel (ex. CO2 avec 2 en indice,
+    m3 avec 3 en exposant) et les convertit en notation matplotlib (CO$_{2}$, m$^{3}$).
     Retourne None si la lecture echoue (on garde alors les libelles bruts).
     """
     try:
@@ -232,7 +308,7 @@ def read_rich_category_labels(file_path, sheet_name, n_rows):
         wb = load_workbook(file_path, rich_text=True, data_only=True)
         ws = wb.worksheets[sheet_name] if isinstance(sheet_name, int) else wb[sheet_name]
         labels = []
-        for r in range(3, 3 + n_rows):
+        for r in excel_rows:
             cell = ws.cell(row=r, column=1)
             value = cell.value
             if value is None:
@@ -262,81 +338,152 @@ def read_rich_category_labels(file_path, sheet_name, n_rows):
             file_path.seek(0)
 
 
+def _cell_ref(row_idx, col_idx):
+    """Reference Excel (ex. 'C5') a partir des index 0-based lus par pandas."""
+    from openpyxl.utils import get_column_letter
+    return f"{get_column_letter(int(col_idx) + 1)}{int(row_idx) + 1}"
+
+
+def _list_cells(refs, max_shown=8):
+    shown = ", ".join(refs[:max_shown])
+    return shown + (f" … (+{len(refs) - max_shown} more)" if len(refs) > max_shown else "")
+
+
 def analyze_excel_and_generate_tables(file_path, sheet_name=0):
     """
     Analyzes the specified Excel file and sheet, identifying scenarios, contributions,
     and generating initial and combined tables for impact assessment.
+
+    - Scenarios, contributions and impact categories keep the order of the Excel file.
+    - Raises TemplateError with a readable message when the sheet does not follow
+      the template (missing names, duplicates, non-numeric values...).
     """
-    try:
-        # Read the Excel file
-        data = pd.read_excel(file_path, header=None, sheet_name=sheet_name)
-        print(f"Excel file loaded successfully from sheet: {sheet_name}!")
+    data = pd.read_excel(file_path, header=None, sheet_name=sheet_name)
+    print(f"Excel file loaded successfully from sheet: {sheet_name}!")
 
-        # Step 1: Detect scenarios
-        scenario_row = data.iloc[0, 1:]
-        scenario_names = scenario_row.unique()
-        scenario_names_cleaned = [
-            clean_scenario_name(name).lower()
-            for name in scenario_names
-        ]
-        print(f"Detected scenarios ({len(scenario_names_cleaned)}): {scenario_names_cleaned}")
+    # Colonnes et lignes totalement vides (mise en forme sans valeur) : ignorees.
+    # Les index pandas = position Excel - 1 : on les garde pour les messages d'erreur.
+    data = data.dropna(axis=1, how="all")
+    header = data.iloc[:2]
+    body = data.iloc[2:].dropna(axis=0, how="all")
+    if data.shape[0] < 3 or data.shape[1] < 2 or body.empty:
+        raise TemplateError(
+            "The sheet is too small: expected scenarios in row 1, contributions in row 2 "
+            "and impact categories in column A starting from row 3."
+        )
+    first_col = data.columns[0]
+    value_cols = list(data.columns[1:])
 
-        # Step 2: Detect contributions
-        contribution_row = data.iloc[1, 1:]
-        print(f"Detected contributions: {list(contribution_row.unique())}")
+    def _clean_text(v):
+        return None if pd.isna(v) or str(v).strip() == "" else str(v).strip()
 
-        # Step 3: Structure the data
-        categories = data.iloc[2:, 0]
-        # Conserver les indices / exposants saisis dans Excel (CO2, m3, ...)
-        rich_labels = read_rich_category_labels(file_path, sheet_name, len(categories))
-        if rich_labels is not None and len(rich_labels) == len(categories):
-            categories = pd.Series(
-                [rl if rl is not None else c for rl, c in zip(rich_labels, categories)],
-                index=categories.index
-            )
-        values = data.iloc[2:, 1:]
-        values.columns = pd.MultiIndex.from_arrays([scenario_row, contribution_row])
-        values.index = categories
+    scenario_row = pd.Series([_clean_text(v) for v in header.iloc[0, 1:]], index=value_cols)
+    contribution_row = pd.Series([_clean_text(v) for v in header.iloc[1, 1:]], index=value_cols)
 
-        # Initial table
-        initial_table = values.copy()
+    # Step 1: names of scenarios / contributions must be filled in
+    errors = []
+    missing_scen = [_cell_ref(header.index[0], c) for c in value_cols if scenario_row[c] is None]
+    missing_contrib = [_cell_ref(header.index[1], c) for c in value_cols if contribution_row[c] is None]
+    if missing_scen:
+        errors.append(f"Scenario name missing in row 1: {_list_cells(missing_scen)}.")
+    if missing_contrib:
+        errors.append(f"Contribution name missing in row 2: {_list_cells(missing_contrib)}.")
 
-        # Impact totals (absolute values)
-        total_impact_table = values.abs().T.groupby(level=0).sum().T
+    categories_raw = [_clean_text(v) for v in body[first_col]]
+    missing_cat = [_cell_ref(i, first_col) for i, v in zip(body.index, categories_raw) if v is None]
+    if missing_cat:
+        errors.append(f"Impact category name missing in column A: {_list_cells(missing_cat)}.")
+    dup_cat = [c for c in unique_in_order(categories_raw) if c is not None and categories_raw.count(c) > 1]
+    if dup_cat:
+        errors.append("The same impact category appears several times: "
+                      + ", ".join(f"'{c}'" for c in dup_cat) + ".")
+    if errors:
+        raise TemplateError(" ".join(errors))
 
-        # Replace columns with simplified scenario names
-        total_impact_table.columns = [
-            clean_scenario_name(name)
-            for name in total_impact_table.columns
-        ]
+    # Step 2: short scenario names (text in brackets) must be unique
+    scenario_full_names = unique_in_order(scenario_row)
+    short_to_full = {}
+    for full in scenario_full_names:
+        short_to_full.setdefault(clean_scenario_name(full).lower(), []).append(full)
+    dup_short = {s: f for s, f in short_to_full.items() if len(f) > 1}
+    if dup_short:
+        details = "; ".join(f"'{s}' ← " + ", ".join(f"\"{n}\"" for n in f) for s, f in dup_short.items())
+        raise TemplateError(
+            "Several scenarios have the same short name (the text in brackets is used as the name, "
+            f"case ignored): {details}. Please give each scenario a different name."
+        )
+    scenario_names_cleaned = list(short_to_full.keys())   # ordre du fichier Excel
+    print(f"Detected scenarios ({len(scenario_names_cleaned)}): {scenario_names_cleaned}")
 
-        # Relative percentages
-        relative_percentage_table = total_impact_table.copy()
-        for category in relative_percentage_table.index:
-            max_value = relative_percentage_table.loc[category].max()
-            relative_percentage_table.loc[category] = (
-                relative_percentage_table.loc[category] / max_value
-            ) * 100
-        relative_percentage_table = relative_percentage_table.add_suffix(" (%)")
+    # Step 3: a contribution must appear only once per scenario
+    pairs = list(zip(scenario_row, contribution_row))
+    dup_pairs = [p for p in unique_in_order(pairs) if pairs.count(p) > 1]
+    if dup_pairs:
+        details = "; ".join(f"'{c}' in \"{s}\"" for s, c in dup_pairs)
+        raise TemplateError(f"A contribution appears twice in the same scenario: {details}.")
+    print(f"Detected contributions: {unique_in_order(contribution_row)}")
 
-        # Combine tables
-        combined_table = pd.concat([total_impact_table, relative_percentage_table], axis=1)
+    # Step 4: values must be numbers (empty cells = 0)
+    raw_values = body[value_cols]
+    values = raw_values.apply(pd.to_numeric, errors="coerce")
+    bad = [_cell_ref(r, c) + f" ('{raw_values.loc[r, c]}')"
+           for c in value_cols for r in raw_values.index
+           if pd.isna(values.loc[r, c]) and not pd.isna(raw_values.loc[r, c])
+           and str(raw_values.loc[r, c]).strip() != ""]
+    if bad:
+        raise TemplateError(f"Non-numeric values found: {_list_cells(bad)}. "
+                            "Use numbers only (decimal point or comma as set in Excel), or leave the cell empty.")
+    values = values.fillna(0.0).astype(float)
 
-        return initial_table, combined_table, total_impact_table, scenario_names_cleaned
-    except Exception as e:
-        print(f"Error analyzing the Excel file: {e}")
-        return None, None, None, None
+    # Step 5: structure the data
+    # Conserver les indices / exposants saisis dans Excel (CO2, m3, ...)
+    excel_rows = [int(i) + 1 for i in body.index]
+    rich_labels = read_rich_category_labels(file_path, sheet_name, excel_rows)
+    if rich_labels is not None and len(rich_labels) == len(categories_raw):
+        categories = [rl if rl is not None else c for rl, c in zip(rich_labels, categories_raw)]
+    else:
+        categories = categories_raw
+    values.columns = pd.MultiIndex.from_arrays([list(scenario_row), list(contribution_row)])
+    values.index = pd.Index(categories)
+
+    # Initial table
+    initial_table = values.copy()
+
+    # Impact totals (absolute values) — sort=False : ordre du fichier Excel conserve
+    total_impact_table = values.abs().T.groupby(level=0, sort=False).sum().T
+
+    # Replace columns with simplified scenario names
+    total_impact_table.columns = [
+        clean_scenario_name(name)
+        for name in total_impact_table.columns
+    ]
+
+    # Relative percentages
+    relative_percentage_table = total_impact_table.copy()
+    for category in relative_percentage_table.index:
+        max_value = relative_percentage_table.loc[category].max()
+        relative_percentage_table.loc[category] = (
+            relative_percentage_table.loc[category] / max_value
+        ) * 100
+    relative_percentage_table = relative_percentage_table.add_suffix(" (%)")
+
+    # Combine tables
+    combined_table = pd.concat([total_impact_table, relative_percentage_table], axis=1)
+
+    return initial_table, combined_table, total_impact_table, scenario_names_cleaned
+
 
 def extract_contributions_from_initial_table(initial_table):
     """
-    Extrait les contributions uniques depuis les colonnes MultiIndex de initial_table.
+    Extrait les contributions uniques depuis les colonnes MultiIndex de initial_table,
+    dans l'ordre du fichier Excel.
     """
     try:
         if not isinstance(initial_table.columns, pd.MultiIndex):
             raise ValueError("initial_table n'a pas un MultiIndex en colonnes.")
 
         contributions = initial_table.columns.get_level_values(1)
-        unique_contributions = sorted(set(contributions.astype(str).str.strip()))
+        unique_contributions = unique_in_order(contributions.astype(str).str.strip())
 
         print(f"Contributions uniques détectées ({len(unique_contributions)}) : {unique_contributions}")
         return unique_contributions
@@ -344,7 +491,7 @@ def extract_contributions_from_initial_table(initial_table):
     except Exception as e:
         print(f"Erreur lors de l'extraction depuis initial_table : {e}")
         return []
-    
+
 def generate_percentage_table(initial_table, total_impact_table):
     """
     Generates a DataFrame identical to initial_table, but converts its values to percentages
@@ -352,7 +499,7 @@ def generate_percentage_table(initial_table, total_impact_table):
     """
     try:
         percentage_table = initial_table.copy()
-        
+
         for category in initial_table.index:
             # Get the maximum impact for this category
             max_total_impact = total_impact_table.loc[category].max()
@@ -377,14 +524,16 @@ def generate_tables_by_scenario(initial_table, scenario_names_cleaned):
     """
     try:
         scenario_tables = {}
+        # Nom court (texte entre parentheses, en minuscules) -> nom complet de la colonne.
+        # Correspondance EXACTE : "lab1" ne doit pas recuperer les donnees de "lab10".
+        full_by_short = {
+            clean_scenario_name(col).lower(): col
+            for col in initial_table.columns.get_level_values(0).unique()
+        }
         for scenario_clean in scenario_names_cleaned:
-            # Find the matching scenario in the MultiIndex columns
-            matching_scenario = [
-                col for col in initial_table.columns.levels[0] if scenario_clean in col.lower()
-            ]
-            if not matching_scenario:
+            matching_scenario = full_by_short.get(scenario_clean)
+            if matching_scenario is None:
                 raise KeyError(f"No column match found for simplified scenario '{scenario_clean}'.")
-            matching_scenario = matching_scenario[0]
 
             # Filter data for this scenario
             scenario_data = initial_table.xs(key=matching_scenario, axis=1, level=0)
@@ -406,13 +555,33 @@ def generate_tables_by_scenario(initial_table, scenario_names_cleaned):
 
             scenario_tables[scenario_clean] = scenario_table
 
-            print(f"\nGenerated table for scenario: {scenario_clean}")
-            print(scenario_table.head())
-
         return scenario_tables
     except Exception as e:
         print(f"Error generating scenario tables: {e}")
         return None
+
+
+
+def place_title_above_texts(fig, ax, title, texts, title_kwargs, gap_pt=8):
+    """
+    Place le titre juste au-dessus du plus haut texte (totaux ecrits au-dessus des barres),
+    au lieu d'un decalage fixe : le titre ne chevauche jamais les totaux, quelle que soit
+    la taille de police ou la longueur des nombres.
+    """
+    ax.set_title(title, pad=gap_pt, **title_kwargs)
+    if not texts:
+        return
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        to_axes = ax.transAxes.inverted()
+        top = 1.0
+        for t in texts:
+            bb = t.get_window_extent(renderer)
+            top = max(top, to_axes.transform((bb.x0, bb.y1))[1])
+        ax.set_title(title, pad=gap_pt, y=top, **title_kwargs)
+    except Exception:
+        pass
 
 
 def plot_comparison_bar_chart(total_impact_table):
@@ -451,7 +620,7 @@ def plot_comparison_bar_chart(total_impact_table):
 
         # Handle scenario colors
         scenario_color_map = None
-        generic_colors = plt.get_cmap("tab10").colors
+        generic_colors = OKABE_ITO
 
         if scenario_colors is not None:
             if isinstance(scenario_colors, dict):
@@ -470,7 +639,7 @@ def plot_comparison_bar_chart(total_impact_table):
         for i, scenario in enumerate(scenarios):
             key = scenario.strip().lower()
             color = (
-                scenario_color_map.get(key, "#000000")
+                scenario_color_map.get(key, palette_color(i))
                 if scenario_color_map else generic_colors[i % len(generic_colors)]
             )
             bar = ax1.bar(
@@ -512,7 +681,7 @@ def plot_comparison_bar_chart(total_impact_table):
         for i, scenario in enumerate(scenarios):
             key = scenario.strip().lower()
             color = (
-                scenario_color_map.get(key, "#000000")
+                scenario_color_map.get(key, palette_color(i))
                 if scenario_color_map else generic_colors[i % len(generic_colors)]
             )
             ax3.bar(
@@ -522,11 +691,12 @@ def plot_comparison_bar_chart(total_impact_table):
                 color=color,
             )
 
+        total_texts = []
         for i, scenario in enumerate(scenarios):
             for j, value in enumerate(normalized_data[scenario]):
                 total_value = total_impact_table.loc[categories[j], scenario]
                 formatted_value = format_total(total_value, categories[j])
-                ax3.text(
+                total_texts.append(ax3.text(
                     x_positions[j] + i * bar_width,
                     value + 2,
                     formatted_value,
@@ -538,10 +708,8 @@ def plot_comparison_bar_chart(total_impact_table):
                     fontstyle=fontstyle,
                     family=fontfamily,
                     rotation=90,
-                )
+                ))
 
-        ax3.set_title("Comparison of Scenarios (with Totals)", fontsize=title_size, fontweight=fontweight,
-                      fontstyle=fontstyle, family=fontfamily, pad=80)
         ax3.set_ylabel("(%)", fontsize=label_size, fontweight=fontweight,
                        fontstyle=fontstyle, family=fontfamily)
         ax3.set_ylim(0, 100)
@@ -552,7 +720,12 @@ def plot_comparison_bar_chart(total_impact_table):
         ax3.grid(axis="y", linestyle="--", alpha=0.7)
         ax3.tick_params(axis='y', labelsize=label_size)
 
-        plt.tight_layout()
+        fig3.tight_layout()
+        # Titre place au-dessus des totaux (qui depassent 100 %) : plus de chevauchement
+        place_title_above_texts(
+            fig3, ax3, "Comparison of Scenarios (with Totals)", total_texts,
+            dict(fontsize=title_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
+        )
         figs.append(fig3)
         plt.close(fig3)
 
@@ -598,7 +771,7 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
 
         # Générer la palette de couleurs
         contribution_colors = {}
-        generic_colors = plt.get_cmap("tab10").colors
+        generic_colors = OKABE_ITO
 
         if contributions_colors is not None:
             if isinstance(contributions_colors, dict):
@@ -664,9 +837,10 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
             main_ax.axhline(0, color="black", linestyle="--", alpha=0.7)
 
             # Ajouter les valeurs totales au-dessus
+            total_texts = []
             for i, total in enumerate(total_impact):
                 formatted_value = format_total(total, list(categories)[i])
-                main_ax.text(
+                total_texts.append(main_ax.text(
                     i, max(bottom_pos[i], 0) + 1,
                     formatted_value,
                     ha="center",
@@ -677,16 +851,7 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
                     fontstyle=fontstyle,
                     family=fontfamily,
                     rotation=90
-                )
-
-            main_ax.set_title(
-                f"Relative Contributions - {scenario_name.capitalize()}",
-                fontsize=title_size,
-                pad=70,
-                fontweight=fontweight,
-                fontstyle=fontstyle,
-                family=fontfamily
-            )
+                ))
             main_ax.set_ylabel("(%)", fontsize=label_size, fontweight=fontweight,
                                fontstyle=fontstyle, family=fontfamily)
             main_ax.set_ylim(min(bottom_neg) - 5, max(bottom_pos))
@@ -702,11 +867,16 @@ def plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
             )
             main_ax.grid(axis="y", linestyle="--", alpha=0.7)
             main_ax.tick_params(axis='y', labelsize=label_size)
-            plt.tight_layout()
+            main_fig.tight_layout()
+            # Titre au-dessus des totaux (au lieu d'un decalage fixe pad=70)
+            place_title_above_texts(
+                main_fig, main_ax, f"Relative Contributions - {scenario_name.capitalize()}", total_texts,
+                dict(fontsize=title_size, fontweight=fontweight, fontstyle=fontstyle, family=fontfamily)
+            )
 
             legend_ax.axis("off")
             legend_ax.legend(bars, labels, title="Contributions", fontsize=legend_size, title_fontsize=legend_size, loc="center")
-            plt.tight_layout()
+            legend_fig.tight_layout()
 
             figures.append((main_fig, legend_fig))
             
@@ -755,7 +925,7 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contribut
 
         # Générer la palette de couleurs
         contribution_color_map = {}
-        generic_colors = plt.get_cmap("tab10").colors
+        generic_colors = OKABE_ITO
 
         if contributions_colors is not None:
             if isinstance(contributions_colors, dict):
@@ -861,12 +1031,12 @@ def plot_relative_contribution_by_scenario_horizontal(scenario_tables, contribut
             )
             main_ax.grid(axis="x", linestyle="--", alpha=0.7)
             main_ax.tick_params(axis='x', labelsize=label_size)
-            plt.tight_layout()
+            main_fig.tight_layout()
 
             legend_ax.axis("off")
             legend_ax.legend(bars, labels, title="Contributions",
                              fontsize=legend_size,title_fontsize=legend_size,  loc="center")
-            plt.tight_layout()
+            legend_fig.tight_layout()
 
             figures.append((main_fig, legend_fig))
            
@@ -910,12 +1080,12 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table, contribution
         categories = initial_table.index
 
         # 🔹 Nettoyage des noms de scénarios
-        scenario_labels = {scenario: scenario.split("(")[-1].replace(")", "").strip().lower() for scenario in scenarios}
+        scenario_labels = {scenario: clean_scenario_name(scenario).lower() for scenario in scenarios}
         total_impact_labels = {sc.lower(): sc for sc in total_impact_table.columns}
 
         # 🔹 Générer le mapping de couleurs des contributions
         contrib_color_map = {}
-        generic_colors = plt.get_cmap("tab10").colors
+        generic_colors = OKABE_ITO
         if contributions_colors is not None:
             if isinstance(contributions_colors, dict):
                 for i, contrib in enumerate(contributions):
@@ -1034,12 +1204,12 @@ def plot_stacked_bar_by_category(initial_table, total_impact_table, contribution
             main_ax.set_xlim(x_positions[0] - (bar_width / 2), x_positions[-1] + (bar_width / 2))
             main_ax.grid(axis="y", linestyle="--", alpha=0.7)
             main_ax.tick_params(axis='y', labelsize=label_size)
-            plt.tight_layout()
+            main_fig.tight_layout()
 
             legend_ax.axis("off")
             legend_ax.legend(bars, labels, title="Contributions",
                              fontsize=legend_size, title_fontsize=legend_size, loc="center")
-            plt.tight_layout()
+            legend_fig.tight_layout()
 
             figures.append((main_fig, legend_fig, category))
 
@@ -1174,8 +1344,8 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
             return []
 
         categories = percentage_table.index
-        scenarios = percentage_table.columns.levels[0]
-        contributions = percentage_table.columns.levels[1]
+        scenarios = percentage_table.columns.get_level_values(0).unique()
+        contributions = percentage_table.columns.get_level_values(1).unique()
         num_scenarios = len(scenarios)
         # Epaisseur des barres et espace entre categories (en cm, 1 unite = 1 cm)
         def_bar, def_gap = default_combined_bar_layout(len(categories), num_scenarios, "vertical")
@@ -1191,28 +1361,27 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
         # Définir les hachures par scénario
         scenario_hatch_dict = {}
         for scenario in scenarios:
-              key = scenario.split("(")[-1].replace(")", "").strip().lower()
+              key = clean_scenario_name(scenario).lower()
               scenario_hatch_dict[scenario] = scenario_hatches.get(key, None)
 
 
         # Gérer les couleurs des contributions
-        cmap = plt.get_cmap("tab10")
         contrib_color_map = {}
         if contributions_colors is not None:
             if isinstance(contributions_colors, dict):
                 for i, contrib in enumerate(contributions):
                     key = contrib.replace("%", "").strip().lower()
-                    contrib_color_map[contrib] = contributions_colors.get(key, cmap(i % 10))
+                    contrib_color_map[contrib] = contributions_colors.get(key, palette_color(i))
             elif hasattr(contributions_colors, "iterrows"):
                 for i, contrib in enumerate(contributions):
                     key = contrib.replace("%", "").strip().lower()
                     match = contributions_colors[
                         contributions_colors["Contributions"].str.lower() == key
                     ]
-                    contrib_color_map[contrib] = match["Hex Code"].iloc[0] if not match.empty else cmap(i % 10)
+                    contrib_color_map[contrib] = match["Hex Code"].iloc[0] if not match.empty else palette_color(i)
         else:
             for i, contrib in enumerate(contributions):
-                contrib_color_map[contrib] = cmap(i % 10)
+                contrib_color_map[contrib] = palette_color(i)
 
         # Gérer les couleurs des scénarios
         scenario_color_map = {}
@@ -1283,7 +1452,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                         bottom_neg += neg_values
 
                 if show_totals:
-                    scenario_clean = scenario.split("(")[-1].replace(")", "").strip()
+                    scenario_clean = clean_scenario_name(scenario)
                     try:
                         totals = total_impact_table[scenario_clean].values
                         cat_max_values = total_impact_table.max(axis=1).values
@@ -1363,7 +1532,7 @@ def plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_tab
                   edgecolor='black')
         for scenario in scenarios
 ]
-        scenario_labels = [s.split("(")[-1].replace(")", "").strip() for s in scenarios]
+        scenario_labels = [clean_scenario_name(s) for s in scenarios]
 
         legend2 = ax2.legend(
     scenario_handles,
@@ -1406,8 +1575,8 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
             return []
 
         categories = percentage_table.index
-        scenarios = percentage_table.columns.levels[0]
-        contributions = percentage_table.columns.levels[1]
+        scenarios = percentage_table.columns.get_level_values(0).unique()
+        contributions = percentage_table.columns.get_level_values(1).unique()
         num_scenarios = len(scenarios)
         num_categories = len(categories)
         # Epaisseur des barres et espace entre categories (en cm, 1 unite = 1 cm)
@@ -1427,11 +1596,10 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
 
        
 
-        scenario_hatch_dict = {scenario: scenario_hatches.get(scenario.split("(")[-1].replace(")", "").strip().lower(), None) for scenario in scenarios}
+        scenario_hatch_dict = {scenario: scenario_hatches.get(clean_scenario_name(scenario).lower(), None) for scenario in scenarios}
 
         # Couleurs contributions
-        cmap = plt.get_cmap("tab10")
-        contrib_color_map = {contrib: contributions_colors.get(contrib.replace("%", "").strip().lower(), cmap(i % 10)) for i, contrib in enumerate(contributions)}
+        contrib_color_map = {contrib: contributions_colors.get(contrib.replace("%", "").strip().lower(), palette_color(i)) for i, contrib in enumerate(contributions)}
 
         # Couleurs scénarios
         scenario_color_map = {scen: scenario_colors.get(clean_scenario_name(scen).lower(), "#FFFFFF") for scen in scenarios}
@@ -1467,7 +1635,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
                 x_hi = max(x_hi, float(left_pos.max()))
 
                 if show_totals:
-                    scenario_clean = scenario.split("(")[-1].replace(")", "").strip()
+                    scenario_clean = clean_scenario_name(scenario)
                     try:
                         totals = total_impact_table[scenario_clean].values
                         cat_max_values = total_impact_table.max(axis=1).values
@@ -1506,7 +1674,7 @@ def plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total
         legend_fig2, ax2 = plt.subplots(figsize=(6, 2), dpi=300)
         ax2.axis('off')
         scenario_handles = [plt.Rectangle((0, 0), 1, 1, facecolor='white', hatch=legend_hatch(scenario_hatch_dict[scenario]), edgecolor='black') for scenario in scenarios]
-        scenario_labels = [s.split("(")[-1].replace(")", "").strip() for s in scenarios]
+        scenario_labels = [clean_scenario_name(s) for s in scenarios]
         legend2 = ax2.legend(scenario_handles, scenario_labels, title="Scenarios", fontsize=legend_size, title_fontsize=legend_size, ncol=2, loc='center')
         legend2.get_frame().set_linewidth(0)
         figures.append(("Scenarios Legend (Horizontal)", legend_fig2))
@@ -1604,39 +1772,269 @@ def find_file_path(file_name, start_directory=None):
 
 
 ###############################
+#   Rendering (cache, exports, settings)
+###############################
+
+CHART_CHECKBOXES = [
+    ("gen_comparison", "Generate Scenario Comparison Charts"),
+    ("gen_details_v", "Generate Detailed Scenario Charts (Vertical)"),
+    ("gen_details_h", "Generate Detailed Scenario Charts (Horizontal)"),
+    ("gen_category", "Generate Category-by-Category Charts"),
+]
+COMBINED_MODES = ["Do not generate", "Vertical", "Horizontal"]
+TOTALS_MODE_LABELS = {
+    "smart": "Next to each bar (moved outside the frame only if it would cross it)",
+    "row": "All aligned just outside the frame",
+}
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+_COMBINED_DYNAMIC_KEYS = ("combined_bar_cm_", "combined_gap_cm_", "combined_len_cm_")
+
+
+def safe_filename(text):
+    """Nom de fichier lisible : 'GW (kg CO$_{2}$ eq)' -> 'gw_kg_co2_eq'."""
+    t = re.sub(r"\$[_^]\{(.*?)\}\$", r"\1", str(text))   # indices / exposants matplotlib
+    t = t.replace("\\", "").replace("$", "")
+    t = re.sub(r"[^\w\-]+", "_", t).strip("_").lower()
+    return t or "chart"
+
+
+def figure_to_outputs(fig, name):
+    """Convertit une figure en PNG 300 DPI + SVG + apercu leger, puis la ferme (memoire)."""
+    out = {"name": name}
+    for key, fmt, dpi in (("png", "png", EXPORT_DPI), ("svg", "svg", None), ("preview", "png", PREVIEW_DPI)):
+        buf = io.BytesIO()
+        if dpi:
+            fig.savefig(buf, format=fmt, dpi=dpi, bbox_inches="tight")
+        else:
+            fig.savefig(buf, format=fmt, bbox_inches="tight")
+        out[key] = buf.getvalue()
+    plt.close(fig)
+    return out
+
+
+def _group(title, figs_and_names, ratios=None):
+    return {"title": title, "ratios": ratios,
+            "items": [figure_to_outputs(fig, name) for fig, name in figs_and_names]}
+
+
+@st.cache_data(show_spinner=False, max_entries=10, ttl=3600)
+def load_tables(data_sig, sheet_name, _file_bytes):
+    """Lecture + validation du fichier, mise en cache par empreinte du fichier et feuille."""
+    return analyze_excel_and_generate_tables(io.BytesIO(_file_bytes), sheet_name)
+
+
+def apply_render_settings(style, total_impact_table):
+    """Applique les reglages aux variables globales utilisees par les fonctions de trace."""
+    global scenario_colors, contributions_colors, scenario_hatches, font_styles
+    font_styles = dict(style["font"])
+    scenario_colors = dict(style["scenario_colors"])
+    contributions_colors = dict(style["contribution_colors"])
+    scenario_hatches = {k: (None if v in (None, "", "None") else v)
+                        for k, v in style["scenario_hatches"].items()}
+    TOTAL_GROUPS.clear()
+    TOTAL_GROUPS.update({cat: list(total_impact_table.loc[cat].values) for cat in total_impact_table.index})
+    # Indices / exposants (CO2, m3...) dans la meme police que le reste du texte
+    family = font_styles["family"]
+    plt.rcParams["mathtext.fontset"] = "custom"
+    plt.rcParams["mathtext.rm"] = family
+    plt.rcParams["mathtext.it"] = f"{family}:italic"
+    plt.rcParams["mathtext.bf"] = f"{family}:bold"
+
+
+def _build_groups(kind, initial_table, total_impact_table, scenario_names, order, extra):
+    groups = []
+    if kind == "comparison":
+        figs = plot_comparison_bar_chart(total_impact_table)
+        meta = [("Main Scenario Comparison", "scenario_comparison"),
+                ("Legend", "scenario_comparison_legend"),
+                ("Scenario Comparison (with Totals)", "scenario_comparison_with_totals")]
+        for fig, (title, fname) in zip(figs, meta):
+            groups.append(_group(title, [(fig, fname)]))
+
+    elif kind in ("details_v", "details_h"):
+        vertical = kind == "details_v"
+        scenario_tables = generate_tables_by_scenario(initial_table, scenario_names) or {}
+        plot_fn = plot_relative_contribution_by_scenario if vertical else plot_relative_contribution_by_scenario_horizontal
+        suffix = "vertical" if vertical else "horizontal"
+        figs = plot_fn(scenario_tables, order) if scenario_tables else []
+        for name, (main_fig, legend_fig) in zip(scenario_tables.keys(), figs):
+            title = f"Scenario: {name}" + ("" if vertical else " (Horizontal)")
+            groups.append(_group(title, [(main_fig, f"{safe_filename(name)}_{suffix}"),
+                                         (legend_fig, f"{safe_filename(name)}_legend_{suffix}")],
+                                 ratios=[3, 1]))
+
+    elif kind == "category":
+        figs = plot_stacked_bar_by_category(initial_table, total_impact_table, order)
+        for main_fig, legend_fig, category in figs:
+            name = safe_filename(category)
+            groups.append(_group(f"Category: {category}",
+                                 [(main_fig, f"category_{name}"), (legend_fig, f"category_{name}_legend")],
+                                 ratios=[4, 1]))
+
+    elif kind in ("combined_v", "combined_h"):
+        percentage_table = generate_percentage_table(initial_table, total_impact_table)
+        plot_fn = (plot_combined_graph_with_scenario_hatches if kind == "combined_v"
+                   else plot_combined_graph_with_scenario_hatches_horizontal)
+        figs = plot_fn(percentage_table, total_impact_table, order,
+                       extra.get("bar_cm"), extra.get("gap_cm"), extra.get("length_cm"),
+                       extra.get("show_pct", True), extra.get("totals_mode", "smart"),
+                       extra.get("totals_offset_pt", 6.0))
+        legends = [(n, f) for n, f in figs if "Legend" in n]
+        charts = [(n, f) for n, f in figs if "Legend" not in n]
+        for name, fig in legends + charts:     # legendes d'abord, comme avant
+            groups.append(_group(name, [(fig, safe_filename(name))]))
+    return groups
+
+
+@st.cache_data(show_spinner=False, max_entries=40, ttl=3600)
+def render_charts(kind, data_sig, sheet_name, style_json, extra_json, _file_bytes):
+    """
+    Genere les graphes d'un type donne et renvoie les images (PNG, SVG, apercu).
+    Mis en cache : tant que le fichier et les reglages utiles a CE type de graphe ne
+    changent pas, rien n'est recalcule (un clic ailleurs dans l'interface est instantane).
+    """
+    initial_table, _combined, total_impact_table, scenario_names = load_tables(data_sig, sheet_name, _file_bytes)
+    style = json.loads(style_json)
+    extra = json.loads(extra_json) if extra_json else {}
+    with _RENDER_LOCK:
+        apply_render_settings(style, total_impact_table)
+        try:
+            return _build_groups(kind, initial_table, total_impact_table, scenario_names,
+                                 style["contribution_order"], extra)
+        finally:
+            plt.close("all")   # aucune figure ne reste en memoire
+
+
+def show_group(group, key_prefix):
+    """Affiche un groupe de figures (ex. graphe + legende) avec boutons PNG / SVG."""
+    st.subheader(group["title"])
+    items = group["items"]
+    ratios = group.get("ratios")
+    cols = st.columns(ratios) if ratios and len(ratios) == len(items) else [st.container() for _ in items]
+    for j, (col, item) in enumerate(zip(cols, items)):
+        with col:
+            st.image(item["preview"])
+            c1, c2 = st.columns(2)
+            c1.download_button(f"📥 PNG ({EXPORT_DPI} DPI)", data=item["png"],
+                               file_name=f"{item['name']}.png", mime="image/png",
+                               key=f"{key_prefix}_{j}_png")
+            c2.download_button("📐 SVG", data=item["svg"],
+                               file_name=f"{item['name']}.svg", mime="image/svg+xml",
+                               key=f"{key_prefix}_{j}_svg")
+    st.markdown("---")
+
+
+def build_zip(all_sections, settings):
+    """ZIP de tous les graphes affiches (PNG + SVG), un dossier par type, + les reglages."""
+    buf = io.BytesIO()
+    used = set()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("lca_graph_settings.json", json.dumps(settings, indent=2, ensure_ascii=False))
+        for header, groups in all_sections:
+            folder = safe_filename(header)
+            for group in groups:
+                for item in group["items"]:
+                    base = f"{folder}/{item['name']}"
+                    path, k = base, 2
+                    while path in used:
+                        path, k = f"{base}_{k}", k + 1
+                    used.add(path)
+                    zf.writestr(path + ".png", item["png"])
+                    zf.writestr(path + ".svg", item["svg"])
+    return buf.getvalue()
+
+
+def _num(value, lo, hi, default):
+    """Nombre borne entre lo et hi, ou la valeur par defaut si invalide."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
+        return float(default)
+    return float(min(hi, max(lo, value)))
+
+
+def _apply_uploaded_settings():
+    """Callback : applique un fichier de reglages JSON aux widgets (avant leur creation)."""
+    ss = st.session_state
+    uploaded = ss.get("settings_upload")
+    if uploaded is None:
+        return
+    try:
+        s = json.loads(uploaded.getvalue().decode("utf-8"))
+        if not isinstance(s, dict):
+            raise ValueError("the file does not contain a JSON object")
+    except Exception as e:
+        ss["_settings_msg"] = ("error", f"Could not read the settings file: {e}")
+        return
+
+    font = s.get("font") or {}
+    for key, options in (("family", FONT_FAMILIES), ("weight", FONT_WEIGHTS), ("style", FONT_STYLES)):
+        if font.get(key) in options:
+            ss[f"font_{key}"] = font[key]
+    for name, _label, lo, hi, default in FONT_SIZE_SLIDERS:
+        if name in font:
+            ss[f"font_{name}"] = int(round(_num(font.get(name), lo, hi, default)))
+    label_by_mode = {mode: label for label, mode in PRECISION_MODES.items()}
+    if font.get("precision_mode") in label_by_mode:
+        ss["precision_mode_label"] = label_by_mode[font["precision_mode"]]
+
+    n_colors = 0
+    for prefix, colors in (("scen_color::", s.get("scenario_colors") or {}),
+                           ("contrib_color::", s.get("contribution_colors") or {})):
+        for name, hex_code in colors.items():
+            if isinstance(hex_code, str) and _HEX_RE.match(hex_code):
+                ss[f"{prefix}{str(name).lower()}"] = hex_code.lower()
+                n_colors += 1
+    if n_colors:
+        ss["customize_colors"] = True
+
+    n_hatches = 0
+    for name, hatch in (s.get("scenario_hatches") or {}).items():
+        hatch = "None" if hatch in (None, "", "None") else hatch
+        if hatch in HATCH_CHOICES:
+            ss[f"hatch_selector_{str(name).lower()}"] = hatch
+            n_hatches += 1
+    if n_hatches:
+        ss["customize_hatches"] = True
+
+    if isinstance(s.get("contribution_order"), list):
+        ss["_loaded_order"] = [str(c) for c in s["contribution_order"]]
+
+    charts = s.get("charts") or {}
+    for key, _label in CHART_CHECKBOXES:
+        if isinstance(charts.get(key), bool):
+            ss[key] = charts[key]
+    if charts.get("combined_chart_mode") in COMBINED_MODES:
+        ss["combined_chart_mode"] = charts["combined_chart_mode"]
+
+    combined = s.get("combined") or {}
+    if isinstance(combined.get("show_pct"), bool):
+        ss["combined_show_total_pct"] = combined["show_pct"]
+    if combined.get("totals_mode") in TOTALS_MODE_LABELS:
+        ss["combined_totals_mode"] = TOTALS_MODE_LABELS[combined["totals_mode"]]
+    if "totals_offset_pt" in combined:
+        ss["combined_totals_offset"] = _num(combined.get("totals_offset_pt"), 0.0, 30.0, 6.0)
+    ss["_loaded_combined"] = {k: combined.get(k) for k in ("orientation", "bar_cm", "gap_cm", "length_cm")}
+    # Les cles des dimensions dependent des donnees : on les reinitialise depuis le fichier
+    for key in [k for k in ss.keys() if str(k).startswith(_COMBINED_DYNAMIC_KEYS)]:
+        del ss[key]
+
+    ss["_settings_msg"] = ("success", "Settings loaded. Names that do not exist in your data are ignored.")
+
+
+###############################
 #           Main App
 ###############################
 
-def main():
-   hide_st_style = """
-        <style>
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        </style>
-        """
-   st.markdown(hide_st_style, unsafe_allow_html=True)
-    # 🌐 Barre de navigation
-   
-
-    
-    
-   global scenario_colors, contributions_colors, font_styles, scenario_hatches
-    # 🌐 Barre de navigation
-   page = st.radio(" ", ["Introduction", "Graph Generator"], key="page_selector", horizontal=True)
-
-
-   if page == "Introduction":
+def show_introduction_page():
     st.markdown(
     """
     <h1 style='text-align: center; font-size: 3em;'>
         LCA Graph Dashboard 🌍
     </h1>
     <p style='text-align: center; font-size: 1.1em;'>
-        
+
     """,
     unsafe_allow_html=True
 )
-    
 
     st.markdown("""
     This tool is designed to automatically generate insightful **Life Cycle Assessment (LCA)** graphs from a structured Excel file.
@@ -1663,7 +2061,8 @@ def main():
     - Each scenario can include multiple contributions.
     - A contribution can appear in several scenarios.
     - You can include as many impact categories as needed.
-    
+    - Each scenario needs a **different short name** (the text in brackets, e.g. *Scenario 1 (**baseline**)*).
+
     🔎 **Note**: The Excel file already contains examples data to help you visualize the kind of charts that will be generated.
     """)
 
@@ -1678,524 +2077,267 @@ def main():
     )
 
     st.markdown("---")
-   elif page == "Graph Generator":
+
+
+def show_generator_page():
+    ss = st.session_state
 
     st.markdown("## 📊 Step 2: Upload and Generate Graphs")
-    
+
+    # Reglages : charger en haut de la barre laterale, sauvegarder une fois tout lu
+    st.sidebar.subheader("💾 Settings file")
+    st.sidebar.file_uploader(
+        "Load saved settings (.json)", type=["json"], key="settings_upload",
+        on_change=_apply_uploaded_settings,
+        help="Colors, hatches, fonts, contribution order and layout saved from a previous session."
+    )
+    msg = ss.pop("_settings_msg", None)
+    if msg:
+        getattr(st.sidebar, msg[0])(msg[1])
+    settings_box = st.sidebar.container()
+
     # File uploader
     st.header("Step 2: Upload your filled Excel file")
     uploaded_file = st.file_uploader("Upload your completed Excel file", type=["xlsx"], key="file_upload_main")
+    if uploaded_file is None:
+        return
 
-    if uploaded_file is not None:
-        try:
-            # Lire les feuilles disponibles dans le fichier
-            excel_file = pd.ExcelFile(uploaded_file)
-            sheet_names = excel_file.sheet_names
+    file_bytes = uploaded_file.getvalue()
+    data_sig = hashlib.sha1(file_bytes).hexdigest()
+    try:
+        sheet_names = pd.ExcelFile(io.BytesIO(file_bytes)).sheet_names
+    except Exception as e:
+        st.error(f"Could not open the Excel file: {e}")
+        return
 
-            # Choix de la feuille par l'utilisateur
-            selected_sheet = st.selectbox("📄 Choose the sheet to analyze", sheet_names)
+    # Choix de la feuille par l'utilisateur
+    selected_sheet = st.selectbox("📄 Choose the sheet to analyze", sheet_names)
 
-            # Affichage aperçu rapide (5 premières lignes)
-            preview_df = pd.read_excel(uploaded_file, sheet_name=selected_sheet, nrows=5)
-            with st.expander("👁️ Preview of the selected sheet"):
-                st.dataframe(preview_df)
-            
-            
-            
-            
-            # Analyze the Excel file from a specified sheet (e.g., "Feuil2")
-            initial_table, combined_table, total_impact_table, scenario_names_cleaned = analyze_excel_and_generate_tables(
-                uploaded_file, sheet_name=selected_sheet
-            )
-            # Si l'analyse a échoué
-            if initial_table is None or combined_table is None or total_impact_table is None:
-                st.warning("⚠️ The selected sheet does not follow the expected template. Please verify that the sheet structure matches the required format (scenarios in row 1, contributions in row 2, categories in column A starting from row 3).")
-            else: 
-             # Totaux par categorie (pour adapter la precision d'affichage des totaux)
-             TOTAL_GROUPS.clear()
-             TOTAL_GROUPS.update({cat: list(total_impact_table.loc[cat].values) for cat in total_impact_table.index})
-             contributions_list = extract_contributions_from_initial_table(initial_table)
-             st.sidebar.subheader("🔢 Contribution stacking order")
-             contributions_order = st.sidebar.multiselect(
-    "🪜 Order of contributions (bottom to top)", 
-    options=contributions_list, 
-    default=contributions_list,
-    key="custom_contribution_order"
-)
-             st.markdown("**Selected contribution order:**")
-             for contrib in contributions_order:
-               st.markdown(f"- {contrib}")
+    # Affichage aperçu rapide (5 premières lignes)
+    with st.expander("👁️ Preview of the selected sheet"):
+        st.dataframe(pd.read_excel(io.BytesIO(file_bytes), sheet_name=selected_sheet, nrows=5))
 
-
- 
-
-             # Génération des couleurs par défaut
-             from matplotlib import colors as mcolors
-
-
-             def generate_default_colors(names, color_list):
-                hex_colors = [mcolors.to_hex(c) for c in color_list]
-                return {name.lower(): hex_colors[i % len(hex_colors)] for i, name in enumerate(names)}
-             basic_contribution_palette = plt.get_cmap("Dark2").colors  
-             
-             default_scenario_colors = generate_default_colors(scenario_names_cleaned, list(mcolors.TABLEAU_COLORS.values()))
-             default_contribution_colors = generate_default_colors(contributions_list, basic_contribution_palette)
-             def generate_default_hatches(scenario_names):
-                 hatch_options = ["//", "oo", "xx", "--", "||", "++", "..", "None"]
-                 return {name.lower(): hatch_options[i % len(hatch_options)] for i, name in enumerate(scenario_names)}
-             default_scenario_hatches = generate_default_hatches(scenario_names_cleaned)
-             scenario_hatches = default_scenario_hatches.copy()
-
-            # Dictionnaires globaux modifiables
-             
-             scenario_hatches = default_scenario_hatches.copy()
-
-             scenario_colors = default_scenario_colors.copy()
-             contributions_colors = default_contribution_colors.copy()
-             font_styles = get_font_styles()
-
-            # Interface de personnalisation dans la sidebar
-             st.sidebar.subheader("🎨 Color customization")
-             customize_colors = st.sidebar.checkbox("Would you like to customize the colors?")
-             
-             if customize_colors:
-                st.sidebar.markdown("#### Scenario colors")
-                for scen in scenario_names_cleaned:
-                    scen_lower = scen.lower()
-                    picked = st.sidebar.color_picker(f"🎯 {scen.capitalize()}", scenario_colors[scen_lower])
-                    scenario_colors[scen_lower] = picked
-
-                st.sidebar.markdown("#### Contribution colors")
-                for contrib in contributions_list:
-                    contrib_lower = contrib.lower()
-                    picked = st.sidebar.color_picker(f"📦 {contrib}", contributions_colors[contrib_lower])
-                    contributions_colors[contrib_lower] = picked
-             st.sidebar.subheader("🔳 Hatch customization")
-             customize_hatches = st.sidebar.checkbox("Would you like to customize the hatches?")
-
-             if customize_hatches:
-                 st.sidebar.markdown("#### Scenario hatches")
-                 hatch_choices = ["///","//","/",  "xx","XX", "++", "..","O","oo", "None"]
-
-                 for scen in scenario_names_cleaned:
-                     scen_lower = scen.lower()
-                     current_hatch = scenario_hatches.get(scen_lower, "None")
-                     selected_hatch = st.sidebar.selectbox(
-            f"Hatch for {scen.capitalize()}",
-            hatch_choices,
-            index=hatch_choices.index(current_hatch) if current_hatch in hatch_choices else 0,
-            key=f"hatch_selector_{scen_lower}"
+    try:
+        initial_table, _combined_table, total_impact_table, scenario_names_cleaned = load_tables(
+            data_sig, selected_sheet, file_bytes)
+    except TemplateError as e:
+        st.error(f"⚠️ The selected sheet does not follow the template. {e}")
+        return
+    except Exception as e:
+        st.error(
+            f"⚠️ The selected sheet could not be read ({e}). Please verify that the sheet structure "
+            "matches the required format (scenarios in row 1, contributions in row 2, categories in "
+            "column A starting from row 3)."
         )
-                     scenario_hatches[scen_lower] = None if selected_hatch == "None" else selected_hatch
+        return
 
-             if initial_table is not None:
-                          scenario_tables = generate_tables_by_scenario(initial_table, scenario_names_cleaned)
-                          percentage_table = generate_percentage_table(initial_table, total_impact_table)
+    contributions_list = extract_contributions_from_initial_table(initial_table)
 
-                          st.subheader("Select Charts to Generate")
-                          generate_scenario_comparison = st.checkbox("Generate Scenario Comparison Charts")
-                          generate_scenario_details = st.checkbox("Generate Detailed Scenario Charts (Vertical)")
-                          generate_scenario_details_horizontal = st.checkbox("Generate Detailed Scenario Charts (Horizontal)")
-                          generate_category_details = st.checkbox("Generate Category-by-Category Charts")
-                          combined_chart_mode = st.selectbox(
-    "📊 Combined View of All Scenarios",
-    ["Do not generate", "Vertical", "Horizontal"]
-)
-                          generate_combined_charts = combined_chart_mode == "Vertical"
-                          generate_combined_charts_horizontal = combined_chart_mode == "Horizontal"
+    # Nouveau fichier ou nouvelle feuille : ordre des contributions = ordre du fichier Excel
+    order_key = "custom_contribution_order"
+    data_key = f"{data_sig}:{selected_sheet}"
+    if ss.get("_data_key") != data_key:
+        ss["_data_key"] = data_key
+        ss[order_key] = list(contributions_list)
+    loaded_order = ss.pop("_loaded_order", None)
+    if loaded_order:
+        valid = [c for c in loaded_order if c in contributions_list]
+        if valid:
+            ss[order_key] = valid
+    ss[order_key] = [c for c in ss.get(order_key, contributions_list) if c in contributions_list]
 
-                          # 📏 Reglage de l'epaisseur des barres et de l'espace entre categories
-                          combined_bar_cm, combined_gap_cm, combined_len_cm = None, None, None
-                          combined_show_pct = True
-                          combined_totals_mode = "smart"
-                          combined_totals_offset = 6.0
-                          if combined_chart_mode != "Do not generate":
-                              orientation = "vertical" if generate_combined_charts else "horizontal"
-                              n_cat = len(percentage_table.index)
-                              n_scen = len(percentage_table.columns.levels[0])
-                              def_bar_cm, def_gap_cm = default_combined_bar_layout(n_cat, n_scen, orientation)
-                              size_word = "width" if orientation == "vertical" else "height"
-                              length_word = "height" if orientation == "vertical" else "width"
-                              def_len_cm = default_combined_bar_length_cm(n_scen, orientation)
-                              with st.expander("📏 Bar layout (combined view)", expanded=True):
-                                  col_bw, col_gap, col_len = st.columns(3)
-                                  combined_bar_cm = col_bw.number_input(
-                                      f"Bar {size_word} (cm)",
-                                      min_value=0.05, max_value=10.0, value=float(def_bar_cm), step=0.05,
-                                      key=f"combined_bar_cm_{orientation}_{n_cat}_{n_scen}",
-                                      help="Thickness of each scenario bar."
-                                  )
-                                  combined_gap_cm = col_gap.number_input(
-                                      "Space between impact categories (cm)",
-                                      min_value=0.0, max_value=20.0, value=float(def_gap_cm), step=0.05,
-                                      key=f"combined_gap_cm_{orientation}_{n_cat}_{n_scen}",
-                                      help="Empty space between two groups of bars (two impact categories)."
-                                  )
-                                  combined_show_pct = st.checkbox(
-                                      "Show percentage in brackets next to totals (Chart with Totals)",
-                                      value=True,
-                                      key="combined_show_total_pct",
-                                      help="Percentage relative to the highest-impact scenario of each category (= 100 %)."
-                                  )
-                                  totals_choice = st.radio(
-                                      "Position of totals (Chart with Totals)",
-                                      ["Next to each bar (moved outside the frame only if it would cross it)",
-                                       "All aligned just outside the frame"],
-                                      index=0,
-                                      key="combined_totals_mode",
-                                      help="The axis always stops at 100 %; totals are never crossed by the frame border."
-                                  )
-                                  combined_totals_mode = "smart" if totals_choice.startswith("Next") else "row"
-                                  combined_totals_offset = st.number_input(
-                                      "Gap between bar / frame and totals (pt)",
-                                      min_value=0.0, max_value=30.0, value=6.0, step=1.0,
-                                      key="combined_totals_offset",
-                                      help="Space between the end of the bar (or the frame border) and the total label. 1 pt ≈ 0.35 mm."
-                                  )
-                                  combined_len_cm = col_len.number_input(
-                                      f"Diagram {length_word} (cm)",
-                                      min_value=3.0, max_value=60.0, value=float(def_len_cm), step=0.5,
-                                      key=f"combined_len_cm_{orientation}_{n_scen}",
-                                      help="Length of the 0-100 % scale, i.e. how long the bars are. "
-                                           "Labels and totals are added around it."
-                                  )
-                                  total_cm = n_cat * (n_scen * combined_bar_cm + combined_gap_cm)
-                                  st.caption(
-                                      f"Resulting diagram (bars area only): {total_cm:.1f} cm {size_word} "
-                                      f"× {combined_len_cm:.1f} cm {length_word}. Defaults reproduce the original layout."
-                                  )
+    st.sidebar.subheader("🔢 Contribution stacking order")
+    contributions_order = st.sidebar.multiselect(
+        "🪜 Order of contributions (bottom to top)", options=contributions_list, key=order_key
+    )
+    st.markdown("**Selected contribution order:**")
+    for contrib in contributions_order:
+        st.markdown(f"- {contrib}")
 
-                          
-                          
+    font_styles_now = get_font_styles()
 
+    # Couleurs par defaut : palette Okabe-Ito (adaptee aux daltoniens)
+    scen_colors = {name.lower(): palette_color(i) for i, name in enumerate(scenario_names_cleaned)}
+    contrib_colors = {}
+    for contrib in contributions_list:
+        contrib_colors.setdefault(contrib.lower(), palette_color(len(contrib_colors)))
+    hatches = {name.lower(): DEFAULT_HATCHES[i % len(DEFAULT_HATCHES)]
+               for i, name in enumerate(scenario_names_cleaned)}
 
-                # 1) Scenario Comparison
-                          if generate_scenario_comparison and total_impact_table is not None:
-                                st.markdown("---")
-                                st.header("Scenario Comparison")
-                                comparison_figures = plot_comparison_bar_chart(total_impact_table)
-                                if comparison_figures:
-                                     titles = ["Main Scenario Comparison", "Legend", "Scenario Comparison (with Totals)"]
+    # Interface de personnalisation dans la sidebar
+    st.sidebar.subheader("🎨 Color customization")
+    _ss_default("customize_colors", False)
+    if st.sidebar.checkbox("Would you like to customize the colors?", key="customize_colors"):
+        st.sidebar.markdown("#### Scenario colors")
+        for scen in scenario_names_cleaned:
+            key = f"scen_color::{scen.lower()}"
+            _ss_default(key, scen_colors[scen.lower()])
+            scen_colors[scen.lower()] = st.sidebar.color_picker(f"🎯 {scen.capitalize()}", key=key)
 
-                                     for i, fig in enumerate(comparison_figures):
-                                            st.subheader(titles[i])
-                                            st.pyplot(fig)
+        st.sidebar.markdown("#### Contribution colors")
+        for contrib in unique_in_order([c.lower() for c in contributions_list]):
+            key = f"contrib_color::{contrib}"
+            _ss_default(key, contrib_colors[contrib])
+            label = next(c for c in contributions_list if c.lower() == contrib)
+            contrib_colors[contrib] = st.sidebar.color_picker(f"📦 {label}", key=key)
 
-                                            col1, col2 = st.columns(2)
+    st.sidebar.subheader("🔳 Hatch customization")
+    _ss_default("customize_hatches", False)
+    if st.sidebar.checkbox("Would you like to customize the hatches?", key="customize_hatches"):
+        st.sidebar.markdown("#### Scenario hatches")
+        for scen in scenario_names_cleaned:
+            scen_lower = scen.lower()
+            key = f"hatch_selector_{scen_lower}"
+            _ss_default(key, hatches[scen_lower] if hatches[scen_lower] in HATCH_CHOICES else "None")
+            hatches[scen_lower] = st.sidebar.selectbox(f"Hatch for {scen.capitalize()}", HATCH_CHOICES, key=key)
 
-                                            # 🔹 PNG export (300 DPI)
-                                            buf_png = io.BytesIO()
-                                            fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
-                                            col1.download_button(
-                label="📥 Télécharger PNG (300 DPI)",
-                data=buf_png.getvalue(),
-                file_name=f"{titles[i].replace(' ', '_').lower()}.png",
-                mime="image/png",
-                key=f"png_button_{i}"
+    # Choix des graphes
+    st.subheader("Select Charts to Generate")
+    selected = {}
+    for key, label in CHART_CHECKBOXES:
+        _ss_default(key, False)
+        selected[key] = st.checkbox(label, key=key)
+    _ss_default("combined_chart_mode", COMBINED_MODES[0])
+    combined_chart_mode = st.selectbox("📊 Combined View of All Scenarios", COMBINED_MODES, key="combined_chart_mode")
+
+    # 📏 Reglage de l'epaisseur des barres et de l'espace entre categories
+    combined = None
+    if combined_chart_mode != "Do not generate":
+        orientation = "vertical" if combined_chart_mode == "Vertical" else "horizontal"
+        n_cat = len(initial_table.index)
+        n_scen = len(scenario_names_cleaned)
+        def_bar_cm, def_gap_cm = default_combined_bar_layout(n_cat, n_scen, orientation)
+        def_len_cm = default_combined_bar_length_cm(n_scen, orientation)
+        size_word = "width" if orientation == "vertical" else "height"
+        length_word = "height" if orientation == "vertical" else "width"
+
+        loaded = ss.get("_loaded_combined") or {}
+        use_loaded = loaded.get("orientation") == orientation
+        k_bar = f"combined_bar_cm_{orientation}_{n_cat}_{n_scen}"
+        k_gap = f"combined_gap_cm_{orientation}_{n_cat}_{n_scen}"
+        k_len = f"combined_len_cm_{orientation}_{n_scen}"
+        _ss_default(k_bar, _num(loaded.get("bar_cm"), 0.05, 10.0, def_bar_cm) if use_loaded else float(def_bar_cm))
+        _ss_default(k_gap, _num(loaded.get("gap_cm"), 0.0, 20.0, def_gap_cm) if use_loaded else float(def_gap_cm))
+        _ss_default(k_len, _num(loaded.get("length_cm"), 3.0, 60.0, def_len_cm) if use_loaded else float(def_len_cm))
+        _ss_default("combined_show_total_pct", True)
+        _ss_default("combined_totals_mode", TOTALS_MODE_LABELS["smart"])
+        _ss_default("combined_totals_offset", 6.0)
+
+        with st.expander("📏 Bar layout (combined view)", expanded=True):
+            col_bw, col_gap, col_len = st.columns(3)
+            bar_cm = col_bw.number_input(
+                f"Bar {size_word} (cm)", min_value=0.05, max_value=10.0, step=0.05, key=k_bar,
+                help="Thickness of each scenario bar."
             )
-
-                                           # 🔹 SVG export
-                                            buf_svg = io.BytesIO()
-                                            fig.savefig(buf_svg, format="svg", bbox_inches='tight')
-                                            col2.download_button(
-                label="📐 Télécharger SVG (vectoriel)",
-                data=buf_svg.getvalue(),
-                file_name=f"{titles[i].replace(' ', '_').lower()}.svg",
-                mime="image/svg+xml",
-                key=f"svg_button_{i}"
+            gap_cm = col_gap.number_input(
+                "Space between impact categories (cm)", min_value=0.0, max_value=20.0, step=0.05, key=k_gap,
+                help="Empty space between two groups of bars (two impact categories)."
             )
-
-                        # 2) Detailed Scenario Charts (vertical)
-                          if generate_scenario_details and scenario_tables:
-                               st.markdown("---")
-                               st.header("Detailed Analysis by Scenario (Vertical)")
-                               scenario_figures = plot_relative_contribution_by_scenario(scenario_tables, contributions_order)
-
-                               for idx, (main_fig, legend_fig) in enumerate(scenario_figures):
-                                      scenario_name = list(scenario_tables.keys())[idx]
-                                      st.subheader(f"Scenario: {scenario_name}")
-                                      
-                                      with st.container():
-                                                              
-                                        col_main, col_legend = st.columns([3, 1])
-                                        with col_main:
-                                           st.pyplot(main_fig)
-
-                                           col_dl1, col_dl2 = st.columns(2)
-
-                                           # 🔽 Main figure download
-                                           buf_main_png = io.BytesIO()
-                                           main_fig.savefig(buf_main_png, format="png", dpi=300, bbox_inches='tight')
-                                           col_dl1.download_button(
-                                                   label="📥 Courbe PNG (300 DPI)",
-                                                   data=buf_main_png.getvalue(),
-                                                   file_name=f"{scenario_name}_vertical.png",
-                                                   mime="image/png",
-                                                   key=f"vertical_png_{scenario_name}"
+            len_cm = col_len.number_input(
+                f"Diagram {length_word} (cm)", min_value=3.0, max_value=60.0, step=0.5, key=k_len,
+                help="Length of the 0-100 % scale, i.e. how long the bars are. "
+                     "Labels and totals are added around it."
             )
-
-                                           buf_main_svg = io.BytesIO()
-                                           main_fig.savefig(buf_main_svg, format="svg", bbox_inches='tight')
-                                           col_dl2.download_button(
-                label="📐 Courbe SVG",
-                data=buf_main_svg.getvalue(),
-                file_name=f"{scenario_name}_vertical.svg",
-                mime="image/svg+xml",
-                key=f"vertical_svg_{scenario_name}"
+            show_pct = st.checkbox(
+                "Show percentage in brackets next to totals (Chart with Totals)",
+                key="combined_show_total_pct",
+                help="Percentage relative to the highest-impact scenario of each category (= 100 %)."
             )
-
-                                        with col_legend:
-                                          st.pyplot(legend_fig)
-
-                                          col_leg1, col_leg2 = st.columns(2)
-
-                                          buf_leg_png = io.BytesIO()
-                                          legend_fig.savefig(buf_leg_png, format="png", dpi=300, bbox_inches='tight')
-                                          col_leg1.download_button(
-                label="📥 Légende PNG (300 DPI)",
-                data=buf_leg_png.getvalue(),
-                file_name=f"{scenario_name}_legend_vertical.png",
-                mime="image/png",
-                key=f"legend_vertical_png_{scenario_name}"
+            totals_choice = st.radio(
+                "Position of totals (Chart with Totals)", list(TOTALS_MODE_LABELS.values()),
+                key="combined_totals_mode",
+                help="The axis always stops at 100 %; totals are never crossed by the frame border."
             )
-
-                                        buf_leg_svg = io.BytesIO()
-                                        legend_fig.savefig(buf_leg_svg, format="svg", bbox_inches='tight')
-                                        col_leg2.download_button(
-                label="📐 Légende SVG",
-                data=buf_leg_svg.getvalue(),
-                file_name=f"{scenario_name}_legend_vertical.svg",
-                mime="image/svg+xml",
-                key=f"legend_vertical_svg_{scenario_name}"
+            totals_offset = st.number_input(
+                "Gap between bar / frame and totals (pt)", min_value=0.0, max_value=30.0, step=1.0,
+                key="combined_totals_offset",
+                help="Space between the end of the bar (or the frame border) and the total label. 1 pt ≈ 0.35 mm."
             )
-
-                               st.markdown("---")
-
-# 3) Detailed Scenario Charts (horizontal)
-                          if generate_scenario_details_horizontal and scenario_tables:
-                               st.markdown("---")
-                               st.header("Detailed Analysis by Scenario (Horizontal)")
-                               horizontal_figures = plot_relative_contribution_by_scenario_horizontal(scenario_tables, contributions_order)
-
-                               for idx, (main_fig, legend_fig) in enumerate(horizontal_figures):
-                                      scenario_name = list(scenario_tables.keys())[idx]
-                                      st.subheader(f"Scenario: {scenario_name} (Horizontal)")
-                                      
-                                      with st.container():
-                                                              
-                                        col_main, col_legend = st.columns([3, 1])
-                                        with col_main:
-                                           st.pyplot(main_fig)
-
-                                           col_dl1, col_dl2 = st.columns(2)
-
-                                           # 🔽 Main figure download
-                                           buf_main_png = io.BytesIO()
-                                           main_fig.savefig(buf_main_png, format="png", dpi=300, bbox_inches='tight')
-                                           col_dl1.download_button(
-                                                   label="📥 Courbe PNG (300 DPI)",
-                                                   data=buf_main_png.getvalue(),
-                                                   file_name=f"{scenario_name}_horizontal.png",
-                                                   mime="image/png",
-                                                   key=f"horizontal_png_{scenario_name}"
+            total_cm = n_cat * (n_scen * bar_cm + gap_cm)
+            st.caption(
+                f"Resulting diagram (bars area only): {total_cm:.1f} cm {size_word} "
+                f"× {len_cm:.1f} cm {length_word}. Defaults reproduce the original layout."
             )
+        combined = {
+            "orientation": orientation,
+            "bar_cm": float(bar_cm),
+            "gap_cm": float(gap_cm),
+            "length_cm": float(len_cm),
+            "show_pct": bool(show_pct),
+            "totals_mode": "smart" if totals_choice == TOTALS_MODE_LABELS["smart"] else "row",
+            "totals_offset_pt": float(totals_offset),
+        }
 
-                                           buf_main_svg = io.BytesIO()
-                                           main_fig.savefig(buf_main_svg, format="svg", bbox_inches='tight')
-                                           col_dl2.download_button(
-                label="📐 Courbe SVG",
-                data=buf_main_svg.getvalue(),
-                file_name=f"{scenario_name}_horizontal.svg",
-                mime="image/svg+xml",
-                key=f"horizontal_svg_{scenario_name}"
-            )
+    # Reglages complets (sauvegarde JSON + ZIP) et reglages utiles au rendu (cle du cache)
+    settings = {
+        "version": SETTINGS_VERSION,
+        "font": font_styles_now,
+        "scenario_colors": scen_colors,
+        "contribution_colors": contrib_colors,
+        "scenario_hatches": hatches,
+        "contribution_order": list(contributions_order),
+        "charts": {**selected, "combined_chart_mode": combined_chart_mode},
+        "combined": combined or {},
+    }
+    settings_box.download_button(
+        "💾 Save current settings (.json)",
+        data=json.dumps(settings, indent=2, ensure_ascii=False),
+        file_name="lca_graph_settings.json", mime="application/json",
+        help="Reload this file later to get exactly the same style (e.g. for all figures of an article)."
+    )
+    style_json = json.dumps({k: settings[k] for k in
+                             ("font", "scenario_colors", "contribution_colors",
+                              "scenario_hatches", "contribution_order")}, sort_keys=True)
 
-                                        with col_legend:
-                                          st.pyplot(legend_fig)
+    jobs = []
+    if selected["gen_comparison"]:
+        jobs.append(("comparison", "Scenario Comparison", ""))
+    if selected["gen_details_v"]:
+        jobs.append(("details_v", "Detailed Analysis by Scenario (Vertical)", ""))
+    if selected["gen_details_h"]:
+        jobs.append(("details_h", "Detailed Analysis by Scenario (Horizontal)", ""))
+    if selected["gen_category"]:
+        jobs.append(("category", "Detailed Analysis by Impact Category", ""))
+    if combined is not None:
+        kind = "combined_v" if combined["orientation"] == "vertical" else "combined_h"
+        header = "Combined View of All Scenarios" + ("" if kind == "combined_v" else " (Horizontal)")
+        jobs.append((kind, header, json.dumps(combined, sort_keys=True)))
 
-                                          col_leg1, col_leg2 = st.columns(2)
+    zip_slot = st.container()
+    sections = []
+    for kind, header, extra_json in jobs:
+        st.markdown("---")
+        st.header(header)
+        with st.spinner("Generating charts…"):
+            groups = render_charts(kind, data_sig, selected_sheet, style_json, extra_json, file_bytes)
+        for gi, group in enumerate(groups):
+            show_group(group, f"{kind}_{gi}")
+        sections.append((header, groups))
 
-                                          buf_leg_png = io.BytesIO()
-                                          legend_fig.savefig(buf_leg_png, format="png", dpi=300, bbox_inches='tight')
-                                          col_leg1.download_button(
-                label="📥 Légende PNG (300 DPI)",
-                data=buf_leg_png.getvalue(),
-                file_name=f"{scenario_name}_legend_horizontal.png",
-                mime="image/png",
-                key=f"legend_horizontal_png_{scenario_name}"
-            )
+    if any(groups for _h, groups in sections):
+        zip_slot.download_button(
+            "🗂️ Download all generated charts (.zip — PNG + SVG + settings)",
+            data=build_zip(sections, settings),
+            file_name="lca_graphs.zip", mime="application/zip", type="primary",
+        )
 
-                                        buf_leg_svg = io.BytesIO()
-                                        legend_fig.savefig(buf_leg_svg, format="svg", bbox_inches='tight')
-                                        col_leg2.download_button(
-                label="📐 Légende SVG",
-                data=buf_leg_svg.getvalue(),
-                file_name=f"{scenario_name}_legend_horizontal.svg",
-                mime="image/svg+xml",
-                key=f"legend_horizontal_svg_{scenario_name}"
-            )
 
-                               st.markdown("---")
+def main():
+    hide_st_style = """
+        <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        </style>
+        """
+    st.markdown(hide_st_style, unsafe_allow_html=True)
 
-                # 4) Category-by-Category Charts
-                          if generate_category_details and percentage_table is not None and total_impact_table is not None:
-                                              st.markdown("---")
-                                              st.header("Detailed Analysis by Impact Category")
-                                              category_figures = plot_stacked_bar_by_category(initial_table, total_impact_table, contributions_order)
+    # 🌐 Barre de navigation
+    page = st.radio(" ", ["Introduction", "Graph Generator"], key="page_selector", horizontal=True)
 
-                                              if category_figures:
-                                                  for main_fig, legend_fig, category_name in category_figures:
-                                                      st.subheader(f"Category: {category_name}")
-                          
-                                                      col1, col2 = st.columns([4, 1])
-                                                      with col1:
-                                                          st.pyplot(main_fig)
-                                                      with col2:
-                                                          st.pyplot(legend_fig)
-                          
-                                                      plt.close(main_fig)
-                                                      plt.close(legend_fig)
-
-                                                      st.markdown("---")
-
-                          # 5) Combined Charts
-                          if generate_combined_charts and percentage_table is not None and total_impact_table is not None:
-                              st.markdown("---")
-                              st.header("Combined View of All Scenarios")
-                              combined_figures = plot_combined_graph_with_scenario_hatches(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode, combined_totals_offset)
-
-                          
-                              if combined_figures:
-                                  # Séparer légendes et courbes
-                                  legends = {}
-                                  charts = []
-                          
-                                  for name, fig in combined_figures:
-                                      if "Legend" in name:
-                                          legends[name] = fig
-                                      else:
-                                          charts.append((name, fig))
-                          
-                                  # 📌 Afficher d’abord les légendes avec téléchargement
-                                  for legend_name, legend_fig in legends.items():
-                                      st.subheader(legend_name)
-                                      st.pyplot(legend_fig)
-                          
-                                      col1, col2 = st.columns(2)
-                          
-                                      buf_png = io.BytesIO()
-                                      legend_fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
-                                      col1.download_button(
-                                          label="📥 Légende PNG (300 DPI)",
-                                          data=buf_png.getvalue(),
-                                          file_name=f"{legend_name.replace(' ', '_').lower()}.png",
-                                          mime="image/png",
-                                          key=f"legend_png_{legend_name}"
-                                      )
-
-                                      buf_svg = io.BytesIO()
-                                      legend_fig.savefig(buf_svg, format="svg", bbox_inches='tight')
-                                      col2.download_button(
-                                          label="📐 Légende SVG",
-                                          data=buf_svg.getvalue(),
-                                          file_name=f"{legend_name.replace(' ', '_').lower()}.svg",
-                                          mime="image/svg+xml",
-                                          key=f"legend_svg_{legend_name}"
-                                      )
-                          
-                                      st.markdown("---")
-                          
-                                  # 🖼️ Puis afficher chaque graphique principal avec téléchargement
-                                  for name, fig in charts:
-                                      st.subheader(name)
-                                      st.pyplot(fig)
-                          
-                                      col1, col2 = st.columns(2)
-                          
-                                      buf_png = io.BytesIO()
-                                      fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
-                                      col1.download_button(
-                                          label="📥 PNG (300 DPI)",
-                                          data=buf_png.getvalue(),
-                                          file_name=f"{name.replace(' ', '_').lower()}.png",
-                                          mime="image/png",
-                                          key=f"combined_png_{name}"
-                                      )
-                          
-                                      buf_svg = io.BytesIO()
-                                      fig.savefig(buf_svg, format="svg", bbox_inches='tight')
-                                      col2.download_button(
-                                          label="📐 SVG",
-                                          data=buf_svg.getvalue(),
-                                          file_name=f"{name.replace(' ', '_').lower()}.svg",
-                                          mime="image/svg+xml",
-                                          key=f"combined_svg_{name}"
-                                      )
-                          
-                                      st.markdown("---")
-                        # 6) Combined Charts - Horizontal
-                          if generate_combined_charts_horizontal and percentage_table is not None and total_impact_table is not None:
-                              st.markdown("---")
-                              st.header("Combined View of All Scenarios (Horizontal)")
-                              combined_horizontal_figures = plot_combined_graph_with_scenario_hatches_horizontal(percentage_table, total_impact_table, contributions_order, combined_bar_cm, combined_gap_cm, combined_len_cm, combined_show_pct, combined_totals_mode, combined_totals_offset)
-                              if combined_horizontal_figures:
-                                  legends_h = {}
-                                  charts_h = []
-                                  for name, fig in combined_horizontal_figures:
-                                      if "Legend" in name:
-                                          legends_h[name] = fig
-                                      else:
-                                          charts_h.append((name, fig))
-                                  for legend_name, legend_fig in legends_h.items():
-                                      st.subheader(legend_name)
-                                      st.pyplot(legend_fig)
-                                      col1, col2 = st.columns(2)
-                                      buf_png = io.BytesIO()
-                                      legend_fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
-                                      col1.download_button(
-                label="📥 Légende PNG (300 DPI)",
-                data=buf_png.getvalue(),
-                file_name=f"{legend_name.replace(' ', '_').lower()}.png",
-                mime="image/png",
-                key=f"legend_horizontal_png_{legend_name}"
-            )
-                                      buf_svg = io.BytesIO()
-                                      legend_fig.savefig(buf_svg, format="svg", bbox_inches='tight')
-                                      col2.download_button(
-                label="📐 Légende SVG",
-                data=buf_svg.getvalue(),
-                file_name=f"{legend_name.replace(' ', '_').lower()}.svg",
-                mime="image/svg+xml",
-                key=f"legend_horizontal_svg_{legend_name}"
-            )
-                                      st.markdown("---")
-                              for name, fig in charts_h:
-                                  st.subheader(name)
-                                  st.pyplot(fig)
-                                  col1, col2 = st.columns(2)
-                                  buf_png = io.BytesIO()
-                                  fig.savefig(buf_png, format="png", dpi=300, bbox_inches='tight')
-                                  col1.download_button(
-                label="📥 PNG (300 DPI)",
-                data=buf_png.getvalue(),
-                file_name=f"{name.replace(' ', '_').lower()}.png",
-                mime="image/png",
-                key=f"combined_horizontal_png_{name}"
-            )
-                                  buf_svg = io.BytesIO()
-                                  fig.savefig(buf_svg, format="svg", bbox_inches='tight')
-                                  col2.download_button(
-                label="📐 SVG",
-                data=buf_svg.getvalue(),
-                file_name=f"{name.replace(' ', '_').lower()}.svg",
-                mime="image/svg+xml",
-                key=f"combined_horizontal_svg_{name}"
-            )
-                                  st.markdown("---")
-                                  
-                                  
-        except Exception as e:
-            st.error(f"Error while processing the file: {str(e)}")
+    if page == "Introduction":
+        show_introduction_page()
+    elif page == "Graph Generator":
+        show_generator_page()
 
 
 if __name__ == "__main__":
